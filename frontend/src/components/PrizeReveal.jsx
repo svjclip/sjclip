@@ -1,14 +1,31 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { Trophy } from "lucide-react";
+import { api } from "../lib/api";
 import CountdownTimer from "./CountdownTimer";
 
 /**
  * Apple-style pinned reveal section.
  * Big statement text that scales / fades as user scrolls through it.
+ * Prize amount + description are admin-editable from /admin and served via
+ * GET /api/config.
  */
 export default function PrizeReveal() {
   const ref = useRef(null);
+  const [prize, setPrize] = useState({ amount: "", description: "" });
+
+  useEffect(() => {
+    api
+      .get("/config")
+      .then((r) =>
+        setPrize({
+          amount: r.data.prize_amount || "",
+          description: r.data.prize_description || "",
+        })
+      )
+      .catch(() => {});
+  }, []);
+
   const { scrollYProgress } = useScroll({
     target: ref,
     offset: ["start end", "end start"],
@@ -32,13 +49,26 @@ export default function PrizeReveal() {
           <Trophy className="w-4 h-4 text-[#53FC18]" />
           <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#53FC18]">Bu Haftanın Ödülü</span>
         </div>
-        <h2 className="font-display font-black text-5xl sm:text-7xl lg:text-8xl xl:text-[10rem] tracking-tighter leading-[0.85]">
-          Kazanmaya<br />
-          <span className="text-[#53FC18] neon-text">değer</span><br />
-          bir şey kazan.
-        </h2>
-        <p className="mt-10 text-zinc-400 max-w-xl mx-auto text-lg leading-relaxed">
-          Her Pazar 00:00 UTC'de liderlik tablosu donar ve en üstteki klibin sahibi ödülü alır.
+        {prize.amount ? (
+          <h2
+            className="font-display font-black text-5xl sm:text-7xl lg:text-8xl xl:text-[10rem] tracking-tighter leading-[0.85]"
+            data-testid="prize-amount"
+          >
+            <span className="text-[#53FC18] neon-text">{prize.amount}</span>
+          </h2>
+        ) : (
+          <h2 className="font-display font-black text-5xl sm:text-7xl lg:text-8xl xl:text-[10rem] tracking-tighter leading-[0.85]">
+            Kazanmaya<br />
+            <span className="text-[#53FC18] neon-text">değer</span><br />
+            bir şey kazan.
+          </h2>
+        )}
+        <p
+          className="mt-10 text-zinc-400 max-w-xl mx-auto text-lg leading-relaxed"
+          data-testid="prize-description"
+        >
+          {prize.description ||
+            "Her Pazar 00:00 UTC'de liderlik tablosu donar ve en üstteki klibin sahibi ödülü alır."}
         </p>
         <div className="mt-12 flex justify-center">
           <div className="glass rounded-2xl px-8 py-6">

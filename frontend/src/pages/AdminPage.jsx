@@ -6,6 +6,7 @@ import { api, formatApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
+import PrizeSettings from "../components/PrizeSettings";
 
 function StatTile({ icon: Icon, label, value, accent, testid }) {
   return (
@@ -95,6 +96,9 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* PRIZE SETTINGS */}
+      <PrizeSettings />
+
       {/* REPORTS */}
       <div className="flex items-end justify-between mb-4">
         <h2 className="font-display font-black text-2xl tracking-tighter inline-flex items-center gap-2">
@@ -146,7 +150,7 @@ export default function AdminPage() {
                     {r.clip && <span className="text-zinc-600 font-mono text-xs ml-2">· {r.clip.votes_count} oy</span>}
                   </div>
                   <div className="text-xs text-zinc-500 mt-1">Bildiren: @{r.reporter_username}</div>
-                  <div className="mt-2 p-2 bg-black/40 border border-white/5 text-sm text-zinc-300 italic">"{r.reason}"</div>
+                  <div className="mt-2 p-2 bg-black/40 border border-white/5 text-sm text-zinc-300 italic">&quot;{r.reason}&quot;</div>
                   {r.status === "resolved" && r.resolution && (
                     <div className="text-[11px] text-zinc-500 mt-2">
                       Karar: <span className="text-zinc-400 font-mono">{r.resolution}</span>

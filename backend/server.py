@@ -451,11 +451,51 @@ async def root():
 
 @api_router.get("/config")
 async def get_config():
+    settings = await db.settings.find_one({"_id": "global"}, {"_id": 0}) or {}
     return {
         "streamer_name": STREAMER_NAME,
         "current_week_key": current_week_key(),
         "telegram_bot_username": TELEGRAM_BOT_USERNAME,
         "required_channels": REQUIRED_CHANNELS,
+        "prize_amount": settings.get("prize_amount", ""),
+        "prize_description": settings.get("prize_description", ""),
+    }
+
+
+class SettingsUpdate(BaseModel):
+    prize_amount: Optional[str] = None
+    prize_description: Optional[str] = None
+
+
+@api_router.get("/admin/settings")
+async def admin_get_settings(user: User = Depends(require_admin)):
+    doc = await db.settings.find_one({"_id": "global"}, {"_id": 0}) or {}
+    return {
+        "prize_amount": doc.get("prize_amount", ""),
+        "prize_description": doc.get("prize_description", ""),
+    }
+
+
+@api_router.put("/admin/settings")
+async def admin_update_settings(payload: SettingsUpdate, user: User = Depends(require_admin)):
+    update: Dict[str, Any] = {}
+    if payload.prize_amount is not None:
+        if len(payload.prize_amount) > 60:
+            raise HTTPException(status_code=400, detail="Ödül miktarı 60 karakteri geçemez")
+        update["prize_amount"] = payload.prize_amount.strip()
+    if payload.prize_description is not None:
+        if len(payload.prize_description) > 240:
+            raise HTTPException(status_code=400, detail="Açıklama 240 karakteri geçemez")
+        update["prize_description"] = payload.prize_description.strip()
+    if not update:
+        raise HTTPException(status_code=400, detail="Güncellenecek alan yok")
+    update["updated_at"] = now_iso()
+    update["updated_by"] = user.username
+    await db.settings.update_one({"_id": "global"}, {"$set": update}, upsert=True)
+    doc = await db.settings.find_one({"_id": "global"}, {"_id": 0}) or {}
+    return {
+        "prize_amount": doc.get("prize_amount", ""),
+        "prize_description": doc.get("prize_description", ""),
     }
 
 
