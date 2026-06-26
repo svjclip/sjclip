@@ -53,22 +53,19 @@ function GlobalSetPasswordGate() {
 
 function GlobalTelegramGate() {
   const { user, missingChannels, needsPasswordSetup, loading } = useAuth();
-  // For users who have NEVER completed onboarding (telegram + channel join),
-  // the dialog is non-dismissable — they must complete the flow to use the
-  // site. For returning users who once completed it but later lost a channel
-  // membership, the dialog is dismissable via the session-storage flag below.
-  const isFirstTimeFlow = !!user && !user.has_completed_onboarding;
+  // Dialog is dismissable for everyone via the "Daha sonra" button — users
+  // can browse the site without Telegram, but submit/vote still gate them
+  // back into this flow when they try those actions.
   const dismissKey = user ? `svj:tg-gate-dismissed:${user.id}` : null;
   const [dismissed, setDismissed] = useState(() => {
-    if (typeof window === "undefined" || !dismissKey || isFirstTimeFlow) return false;
+    if (typeof window === "undefined" || !dismissKey) return false;
     return window.sessionStorage.getItem(dismissKey) === "1";
   });
 
   useEffect(() => {
-    if (isFirstTimeFlow) { setDismissed(false); return; }
     if (!dismissKey) { setDismissed(false); return; }
     setDismissed(window.sessionStorage.getItem(dismissKey) === "1");
-  }, [dismissKey, user?.telegram_id, (missingChannels || []).length, isFirstTimeFlow]);
+  }, [dismissKey, user?.telegram_id, (missingChannels || []).length]);
 
   useEffect(() => {
     const open = () => {
@@ -89,13 +86,11 @@ function GlobalTelegramGate() {
       open={show}
       onOpenChange={(v) => {
         if (!v) {
-          // First-time users cannot dismiss — refuse the close.
-          if (isFirstTimeFlow) return;
           if (dismissKey) window.sessionStorage.setItem(dismissKey, "1");
           setDismissed(true);
         }
       }}
-      allowSkip={!isFirstTimeFlow}
+      allowSkip={true}
     />
   );
 }

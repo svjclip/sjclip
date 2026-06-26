@@ -8,6 +8,9 @@ import {
   Crown,
   Clock,
   CheckCircle2,
+  ExternalLink,
+  ThumbsUp,
+  Medal,
 } from "lucide-react";
 import { api, formatApiError } from "../lib/api";
 import { toast } from "sonner";
@@ -282,63 +285,141 @@ function ContestDetail({ contest, onChanged }) {
   };
 
   return (
-    <div className="border-t border-white/10 p-4 space-y-4">
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-[10px] font-mono uppercase tracking-[0.22em] text-[#FFD166]">
-            🏆 Kazanan Klibi Seç (en çok oy alanlar)
+    <div className="border-t border-white/10 p-4 sm:p-6 space-y-5">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-[10px] font-mono uppercase tracking-[0.22em] text-[#FFD166] mb-1">
+            Kazanan Belirleme
+          </div>
+          <h4 className="font-display font-black text-xl tracking-tighter inline-flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-[#FFD166]" />
+            Bu Etkinliğin Klipleri
           </h4>
-          <button
-            type="button"
-            onClick={remove}
-            className="text-[11px] uppercase tracking-wider text-red-400 hover:text-red-300 inline-flex items-center gap-1.5"
-            data-testid={`admin-contest-delete-${contest.id}`}
-          >
-            <Trash2 className="w-3 h-3" />
-            Etkinliği Sil
-          </button>
+          <p className="text-xs text-zinc-500 mt-1">
+            En çok oy alan klipler yukarıda. Kazanan olarak işaretlediğinde tüm kullanıcılara bildirim gider.
+          </p>
         </div>
-        {loading && <p className="text-sm text-zinc-500">Yükleniyor...</p>}
-        {!loading && topClips.length === 0 && (
-          <p className="text-sm text-zinc-500">Henüz klip yok.</p>
-        )}
-        <ul className="space-y-1.5">
-          {topClips.map((c, i) => (
-            <li
-              key={c.id}
-              className={`flex items-center gap-3 p-2.5 border ${
-                contest.winner_clip_id === c.id
-                  ? "border-[#FFD166]/40 bg-[#FFD166]/5"
-                  : "border-white/5 hover:border-white/15"
-              } transition-colors`}
-            >
-              <span className="font-mono text-xs text-zinc-500 w-6 flex-shrink-0">
-                #{i + 1}
-              </span>
-              <span className="text-sm text-zinc-200 truncate flex-1">{c.title}</span>
-              <span className="text-xs font-mono text-zinc-500 flex-shrink-0">
-                {c.votes_count} oy
-              </span>
-              {contest.winner_clip_id === c.id ? (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#FFD166]/20 border border-[#FFD166]/40 text-[10px] uppercase tracking-wider text-[#FFD166] font-bold">
-                  <Crown className="w-3 h-3" />
-                  Kazanan
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => pickWinner(c.id)}
-                  disabled={settingWinner === c.id}
-                  className="text-[10px] uppercase tracking-wider px-2 py-1 border border-[#FFD166]/40 text-[#FFD166] hover:bg-[#FFD166]/10 disabled:opacity-40"
-                  data-testid={`admin-contest-pick-winner-${c.id}`}
-                >
-                  {settingWinner === c.id ? "..." : "Kazanan Yap"}
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+        <button
+          type="button"
+          onClick={remove}
+          className="text-[11px] uppercase tracking-wider text-red-400 hover:text-red-300 inline-flex items-center gap-1.5"
+          data-testid={`admin-contest-delete-${contest.id}`}
+        >
+          <Trash2 className="w-3 h-3" />
+          Etkinliği Sil
+        </button>
       </div>
+
+      {loading && <p className="text-sm text-zinc-500 py-6 text-center">Yükleniyor...</p>}
+      {!loading && topClips.length === 0 && (
+        <div className="border border-dashed border-white/10 p-8 text-center">
+          <p className="text-sm text-zinc-400 font-bold">Henüz klip yok.</p>
+          <p className="text-xs text-zinc-600 mt-1">Topluluk klip gönderdikçe burada listelenecek.</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-2.5" data-testid={`admin-winner-clips-${contest.id}`}>
+        {topClips.map((c, i) => {
+          const isWinner = contest.winner_clip_id === c.id;
+          const rank = i + 1;
+          return (
+            <div
+              key={c.id}
+              className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 border ${
+                isWinner
+                  ? "border-[#FFD166]/60 bg-[#FFD166]/[0.08] shadow-[0_0_30px_rgba(255,209,102,0.12)]"
+                  : "border-white/10 bg-black/40 hover:border-white/25"
+              } transition-all`}
+              data-testid={`admin-winner-clip-${c.id}`}
+            >
+              <RankBadge rank={rank} isWinner={isWinner} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h5 className="font-display font-bold text-base sm:text-lg tracking-tight text-white truncate">
+                    {c.title}
+                  </h5>
+                  {isWinner && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#FFD166] text-black text-[10px] font-black uppercase tracking-wider">
+                      <Crown className="w-3 h-3" />
+                      Kazanan
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-500 mt-1 flex-wrap">
+                  <span className="text-zinc-300">@{c.submitter_username}</span>
+                  <span className="text-zinc-700">·</span>
+                  <span className="inline-flex items-center gap-1 text-[#53FC18] font-mono font-bold">
+                    <ThumbsUp className="w-3.5 h-3.5" />
+                    {c.votes_count} oy
+                  </span>
+                  <a
+                    href={c.kick_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1 text-zinc-500 hover:text-white"
+                    data-testid={`admin-winner-clip-view-${c.id}`}
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Klibi izle
+                  </a>
+                </div>
+              </div>
+              <div className="flex-shrink-0">
+                {isWinner ? (
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-[#FFD166] inline-flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Açıklandı
+                  </div>
+                ) : (
+                  <Button
+                    onClick={() => pickWinner(c.id)}
+                    disabled={settingWinner !== null}
+                    className="h-9 px-3 sm:px-4 bg-[#FFD166] text-black text-[11px] sm:text-xs font-black uppercase tracking-wider rounded-none hover:bg-[#e6bb5c] disabled:opacity-40"
+                    data-testid={`admin-contest-pick-winner-${c.id}`}
+                  >
+                    <Crown className="w-3.5 h-3.5 mr-1.5" />
+                    {settingWinner === c.id ? "..." : "Kazanan Yap"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RankBadge({ rank, isWinner }) {
+  // Top-3 get medal icons + tinted backgrounds, rest get a plain monospace #N.
+  if (rank === 1) {
+    return (
+      <div className={`flex-shrink-0 w-12 h-12 flex flex-col items-center justify-center border ${isWinner ? "border-[#FFD166] bg-[#FFD166]/15" : "border-[#FFD166]/40 bg-[#FFD166]/10"}`}>
+        <Crown className="w-4 h-4 text-[#FFD166]" />
+        <span className="text-[10px] font-mono font-bold text-[#FFD166] leading-none mt-0.5">#1</span>
+      </div>
+    );
+  }
+  if (rank === 2) {
+    return (
+      <div className="flex-shrink-0 w-12 h-12 flex flex-col items-center justify-center border border-zinc-400/30 bg-zinc-400/5">
+        <Medal className="w-4 h-4 text-zinc-300" />
+        <span className="text-[10px] font-mono font-bold text-zinc-300 leading-none mt-0.5">#2</span>
+      </div>
+    );
+  }
+  if (rank === 3) {
+    return (
+      <div className="flex-shrink-0 w-12 h-12 flex flex-col items-center justify-center border border-orange-400/30 bg-orange-500/5">
+        <Medal className="w-4 h-4 text-orange-400" />
+        <span className="text-[10px] font-mono font-bold text-orange-400 leading-none mt-0.5">#3</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center border border-white/10 bg-black/40">
+      <span className="font-mono text-sm font-bold text-zinc-500">#{rank}</span>
     </div>
   );
 }
