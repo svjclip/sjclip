@@ -130,36 +130,40 @@ function HlsPlayer({ clip }) {
     if (!video) return;
     setError(null);
 
-    // Safari plays HLS natively
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    // hls.js'e ÖNCELİK ver: Chrome native HLS oynatamaz ama
+    // canPlayType bazen "maybe" döndürüp bizi yanlış yola sokuyor.
+    // Yalnızca Safari (probably) native HLS kullansın.
+    const nativeHls = video.canPlayType("application/vnd.apple.mpegurl");
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+      hls.loadSource(playlistUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        console.error("[hls.js error]", data?.type, data?.details, data?.reason || data);
+        if (data.fatal) {
+          setError("Video kaynağı yüklenemedi.");
+          hls.destroy();
+        }
+      });
+      return () => {
+        try {
+          hls.destroy();
+        } catch {
+          /* noop */
+        }
+      };
+    }
+
+    if (nativeHls === "probably" || nativeHls === "maybe") {
+      // Safari / iOS path
       video.src = playlistUrl;
       const onErr = () => setError("Video oynatılamadı.");
       video.addEventListener("error", onErr);
       return () => video.removeEventListener("error", onErr);
     }
 
-    if (!Hls.isSupported()) {
-      setError("Tarayıcınız HLS oynatmayı desteklemiyor.");
-      return;
-    }
-
-    const hls = new Hls({ enableWorker: true, lowLatencyMode: false });
-    hls.loadSource(playlistUrl);
-    hls.attachMedia(video);
-    hls.on(Hls.Events.ERROR, (_, data) => {
-      console.error("[hls.js error]", data?.type, data?.details, data?.reason || data);
-      if (data.fatal) {
-        setError("Video kaynağı yüklenemedi.");
-        hls.destroy();
-      }
-    });
-    return () => {
-      try {
-        hls.destroy();
-      } catch {
-        /* noop */
-      }
-    };
+    setError("Tarayıcınız HLS oynatmayı desteklemiyor.");
   }, [playlistUrl]);
 
   if (resolving || !playlistUrl) {
