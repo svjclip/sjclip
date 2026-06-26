@@ -1,55 +1,67 @@
-import { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
-import { HOME } from "@/constants/testIds";
+import { Toaster } from "sonner";
+import { AuthProvider, useAuth } from "./lib/auth";
+import { api } from "./lib/api";
+import Navbar from "./components/Navbar";
+import Footer from "./components/Footer";
+import HomePage from "./pages/HomePage";
+import LeaderboardPage from "./pages/LeaderboardPage";
+import ClipDetailPage from "./pages/ClipDetailPage";
+import SetPasswordDialog from "./components/SetPasswordDialog";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+function GlobalSetPasswordGate() {
+  const { user, needsPasswordSetup } = useAuth();
+  // Only show if a Telegram-only legacy user is logged in but has no password yet
+  const show = !!user && needsPasswordSetup && !user.has_password;
+  return <SetPasswordDialog open={show} />;
+}
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+function AppShell() {
+  const [streamerName, setStreamerName] = useState("SVJ");
 
   useEffect(() => {
-    helloWorldApi();
+    api
+      .get("/config")
+      .then((res) => setStreamerName(res.data.streamer_name))
+      .catch(() => {});
   }, []);
 
   return (
-    <div>
-      <header className="App-header">
-        <a
-          data-testid={HOME.emergentLink}
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
+    <div className="App relative min-h-screen bg-[#050505] text-white">
+      <BrowserRouter>
+        <Navbar streamerName={streamerName} />
+        <main className="relative z-10">
+          <Routes>
+            <Route path="/" element={<HomePage streamerName={streamerName} />} />
+            <Route path="/leaderboard" element={<LeaderboardPage />} />
+            <Route path="/clip/:id" element={<ClipDetailPage />} />
+          </Routes>
+        </main>
+        <Footer streamerName={streamerName} />
+      </BrowserRouter>
+      <GlobalSetPasswordGate />
+      <Toaster
+        theme="dark"
+        position="bottom-right"
+        toastOptions={{
+          style: {
+            background: "#0A0A0A",
+            border: "1px solid rgba(83, 252, 24, 0.3)",
+            color: "white",
+          },
+        }}
+      />
     </div>
   );
-};
+}
 
 function App() {
   return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </div>
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   );
 }
 

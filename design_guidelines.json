@@ -1,211 +1,140 @@
 {
-  "project": "SVJ.CLIPS",
-  "theme": "dark",
-  "archetype": "Archetype 7 (Electric & Neon) - Adjusted for Gaming/Streaming",
-  "design_philosophy": "Retro-Futurism meets Cyber-Athleticism. High contrast, aggressive layout, zero decorative blobs. The UI must feel like a terminal command center built for gamers.",
+  "project_context": {
+    "domain": "Gaming/Streaming Clip Platform",
+    "theme": "Dark",
+    "archetype": "7 (Electric & Neon) anchored in 5 (Luxury)",
+    "mood": "Immersive, high-energy, premium, professional, deep space, neon glow",
+    "description": "A professional community platform for users to submit Kick clip URLs, watch, upvote, and compete on a weekly leaderboard. Uses 3D hero elements and a highly polished dark mode with toxic green neon accents."
+  },
   "colors": {
     "background": {
-      "main": "#050505",
+      "default": "#050505",
       "surface": "#0A0A0A",
-      "surface_elevated": "#121212"
+      "surface_hover": "#121212",
+      "glass": "rgba(10, 10, 10, 0.6)"
     },
-    "primary": {
-      "neon_green": "#53FC18",
-      "neon_green_glow": "rgba(83, 252, 24, 0.5)",
-      "neon_green_muted": "rgba(83, 252, 24, 0.1)"
+    "brand": {
+      "primary": "#53FC18",
+      "primary_hover": "#3ECA0D",
+      "primary_glow": "rgba(83, 252, 24, 0.25)"
     },
     "text": {
       "primary": "#FFFFFF",
-      "secondary": "#A3A3A3",
-      "muted": "#525252",
+      "secondary": "#A1A1AA",
+      "muted": "#71717A",
       "inverse": "#050505"
     },
-    "states": {
-      "error": "#FF3B30",
-      "success": "#53FC18",
-      "warning": "#FFCC00"
+    "border": {
+      "default": "#1A1A1A",
+      "focus": "#27272A",
+      "neon": "rgba(83, 252, 24, 0.3)"
     },
-    "borders": {
-      "default": "rgba(255, 255, 255, 0.1)",
-      "focus": "#53FC18",
-      "active": "rgba(83, 252, 24, 0.3)"
+    "state": {
+      "success": "#53FC18",
+      "warning": "#FFD166",
+      "error": "#FF0055"
     }
   },
   "typography": {
-    "font_families": {
+    "fonts": {
       "heading": "'Unbounded', sans-serif",
       "body": "'Outfit', sans-serif",
       "mono": "'JetBrains Mono', monospace"
     },
     "scale": {
-      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-black",
-      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-bold",
-      "h3": "text-xl sm:text-2xl font-semibold",
-      "body_lg": "text-lg leading-relaxed",
-      "body": "text-base leading-relaxed",
-      "small": "text-sm text-secondary",
-      "label": "text-xs tracking-[0.2em] uppercase font-bold text-neon_green"
+      "h1": "text-4xl sm:text-5xl lg:text-6xl font-black tracking-tighter leading-none",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-bold tracking-tight",
+      "body": "text-base font-normal leading-relaxed text-[#A1A1AA]",
+      "small": "text-sm font-medium tracking-wide",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em] text-[#53FC18]"
     }
   },
   "spacing_and_layout": {
-    "containers": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "philosophy": "Generous spacing. Dark mode needs room to breathe. Use tight gaps for data-heavy areas (leaderboard) and wide gaps for immersive areas.",
+    "container": "max-w-7xl mx-auto px-6 lg:px-8",
     "grids": {
-      "clip_feed": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6",
-      "leaderboard": "flex flex-col gap-2"
+      "bento": "grid grid-cols-1 md:grid-cols-12 gap-6",
+      "clip_feed": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8"
     },
-    "cards": {
-      "padding": "p-6 lg:p-8",
-      "radius": "rounded-none border border-borders-default",
-      "hover_effect": "hover:border-[#53FC18]/50 transition-colors duration-300"
+    "padding": {
+      "section": "py-24 sm:py-32",
+      "card": "p-6 lg:p-8"
     }
   },
-  "three_d_scene": {
-    "library": "@react-three/fiber and @react-three/drei",
-    "critical_rule": "NO GREEN BLOBS. NO GRADIENT ORBS. Background must be strictly atmospheric space and wireframes.",
-    "composition": {
-      "stars": {
-        "radius": 100,
-        "depth": 50,
-        "count": 3000,
-        "factor": 4,
-        "saturation": 0,
-        "fade": true,
-        "speed": 0.5
-      },
-      "wireframe_sphere": {
-        "geometry": "SphereGeometry(15, 32, 32)",
-        "position": [0, 0, -35],
-        "material": {
-          "type": "meshStandardMaterial",
-          "color": "#53FC18",
-          "emissive": "#53FC18",
-          "emissiveIntensity": 0.4,
-          "wireframe": true,
-          "transparent": true,
-          "opacity": 0.15
-        },
-        "animation": "Slow, constant rotation on Y and X axes"
-      }
+  "surfaces_and_effects": {
+    "glassmorphism": {
+      "base": "bg-black/60 backdrop-blur-2xl border border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.5)]",
+      "hover": "hover:bg-black/80 hover:border-[#53FC18]/30 hover:shadow-[0_0_30px_rgba(83,252,24,0.1)] transition-all duration-300"
+    },
+    "neon_glow": {
+      "text": "drop-shadow-[0_0_10px_rgba(83,252,24,0.6)]",
+      "box": "shadow-[0_0_20px_rgba(83,252,24,0.2)]"
+    },
+    "borders": {
+      "radius": "rounded-2xl"
     }
   },
   "components": {
-    "button": {
-      "primary": "bg-[#53FC18] text-black font-heading font-bold rounded-none px-6 py-3 uppercase tracking-wider hover:bg-[#42cc13] transition-all duration-200 shadow-[0_0_15px_rgba(83,252,24,0.3)] hover:shadow-[0_0_25px_rgba(83,252,24,0.6)]",
-      "secondary": "bg-transparent border border-[#53FC18] text-[#53FC18] font-heading font-bold rounded-none px-6 py-3 uppercase tracking-wider hover:bg-[#53FC18]/10 transition-all duration-200",
-      "ghost": "text-secondary hover:text-white transition-colors"
+    "buttons": {
+      "primary": "bg-[#53FC18] text-[#050505] font-bold px-8 py-4 rounded-xl hover:bg-[#3ECA0D] hover:shadow-[0_0_20px_rgba(83,252,24,0.4)] transition-all duration-300 transform hover:-translate-y-1",
+      "secondary": "bg-transparent text-white border border-white/10 font-bold px-8 py-4 rounded-xl hover:border-white/30 hover:bg-white/5 transition-all duration-300",
+      "upvote": "group flex items-center justify-center gap-2 bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:border-[#53FC18]/50 hover:bg-[#53FC18]/10 transition-colors"
     },
-    "input": {
-      "style": "bg-[#0A0A0A] border border-white/10 rounded-none px-4 py-3 text-white focus:border-[#53FC18] focus:ring-1 focus:ring-[#53FC18] focus:outline-none transition-all placeholder:text-white/20 font-body"
+    "cards": {
+      "clip_card": "relative overflow-hidden rounded-2xl bg-[#0A0A0A] border border-white/5 group",
+      "leaderboard_row": "flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors"
     },
-    "kick_iframe_card": {
-      "wrapper": "relative w-full aspect-video bg-black border border-white/10 group-hover:border-[#53FC18]/40 transition-colors",
-      "overlay_actions": "absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/90 to-transparent flex justify-between items-end"
+    "hero": {
+      "description": "Immersive 3D scene using React Three Fiber. Abstract dark neon green geometric shapes floating. Overlay is max bg-black/40.",
+      "background": "bg-[#050505]"
     },
-    "modal_gate": {
-      "overlay": "bg-black/80 backdrop-blur-md",
-      "content": "bg-[#0A0A0A] border border-[#53FC18]/30 shadow-[0_0_40px_rgba(83,252,24,0.1)] p-8 max-w-md w-full rounded-none"
+    "navigation": {
+      "style": "fixed top-0 w-full z-50 bg-black/50 backdrop-blur-xl border-b border-white/5"
     }
   },
-  "motion": {
-    "library": "framer-motion",
-    "page_transitions": {
-      "initial": { "opacity": 0, "y": 20 },
-      "animate": { "opacity": 1, "y": 0 },
-      "transition": { "duration": 0.5, "ease": "easeOut" }
-    },
-    "stagger_children": {
-      "container": {
-        "animate": { "transition": { "staggerChildren": 0.1 } }
+  "interactions_and_motion": {
+    "page_load": "Framer motion staggered fade-in up (y: 20, opacity: 0 -> y: 0, opacity: 1).",
+    "upvote_action": "Scale click effect (scale 0.95 -> 1.1 -> 1) with color transition to #53FC18.",
+    "hover_states": "All interactive elements MUST have visible hover states, typically brightening text/border or adding a soft neon glow."
+  },
+  "icons": {
+    "library": "lucide-react",
+    "usage": "Use stroke-width 2 for clean, technical look. Icon size 20px (w-5 h-5) for buttons, 24px (w-6 h-6) for headers."
+  },
+  "media": {
+    "hero_backgrounds": [
+      {
+        "url": "https://images.pexels.com/photos/5278665/pexels-photo-5278665.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Abstract shiny green and black liquid patterns",
+        "category": "hero_bg"
       },
-      "item": {
-        "initial": { "opacity": 0, "y": 10 },
-        "animate": { "opacity": 1, "y": 0 }
+      {
+        "url": "https://images.unsplash.com/photo-1707430393809-784967fe6fee?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODR8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGRhcmslMjBncmVlbiUyMG5lb24lMjAzZCUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzgyNDI2NTM3fDA&ixlib=rb-4.1.0&q=85",
+        "description": "black and green background with wavy lines",
+        "category": "hero_bg_fallback"
       }
-    }
-  },
-  "data_testids": {
-    "navigation": [
-      "nav-home-link",
-      "nav-leaderboard-link",
-      "nav-profile-link",
-      "nav-login-btn"
     ],
-    "auth": [
-      "login-username-input",
-      "login-password-input",
-      "login-submit-btn",
-      "register-username-input",
-      "register-password-input",
-      "register-email-input",
-      "register-phone-input",
-      "register-submit-btn",
-      "password-reset-code-input",
-      "password-reset-submit-btn"
-    ],
-    "telegram": [
-      "tg-link-init-btn",
-      "tg-link-verify-btn",
-      "tg-bot-deeplink"
-    ],
-    "clips": [
-      "clip-submit-url-input",
-      "clip-submit-title-input",
-      "clip-submit-btn",
-      "clip-card-container",
-      "clip-vote-btn"
-    ],
-    "leaderboard": [
-      "leaderboard-list",
-      "leaderboard-item",
-      "leaderboard-reset-timer"
-    ],
-    "gates": [
-      "gate-login-modal",
-      "gate-telegram-modal",
-      "gate-channel-modal"
+    "portraits": [
+      {
+        "url": "https://images.unsplash.com/photo-1725273500428-834460c1157e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzl8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBlc3BvcnRzJTIwcGxheWVyJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzgyNDI2NTM3fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Gamer profile portrait 1",
+        "category": "user_avatar"
+      },
+      {
+        "url": "https://images.pexels.com/photos/7915307/pexels-photo-7915307.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Gamer profile portrait 2",
+        "category": "user_avatar"
+      }
     ]
   },
-  "localization_tr": {
-    "nav": {
-      "home": "Ana Sayfa",
-      "leaderboard": "Haftalık Sıralama",
-      "submit": "Klip Gönder",
-      "login": "Giriş Yap"
-    },
-    "auth": {
-      "username": "Kullanıcı Adı",
-      "password": "Şifre",
-      "email": "E-posta (Sadece Veri)",
-      "phone": "Telefon (Sadece Veri)",
-      "register_cta": "Hesap Oluştur",
-      "login_cta": "Giriş Yap"
-    },
-    "telegram": {
-      "connect": "Telegram'ı Bağla",
-      "verify": "Bağlantıyı Doğrula",
-      "join_channel": "Kanal Üyesi Ol",
-      "bot_code_prompt": "Telegram Bot Kodunu Girin"
-    },
-    "clips": {
-      "url_placeholder": "Kick Klip Linki (kick.com/.../clips/clip_XXX)",
-      "title_placeholder": "Klip Başlığı",
-      "send": "Gönder",
-      "vote": "Oy Ver"
-    },
-    "leaderboard": {
-      "title": "Haftalık Top Klipler",
-      "reset_in": "Sıfırlanmaya Kalan Süre:"
-    }
-  },
   "instructions_to_main_agent": [
-    "1. Strict adherence to Next.js/React + Vite/FastAPI setup as required by the backend system. Ensure the frontend is built using standard React/Vite.",
-    "2. All files are in .js/jsx. Do NOT use TypeScript (.ts/.tsx).",
-    "3. Use standard Tailwind classes for all styling. Rely on raw HTML + Tailwind for structural layouts to allow high asymmetry and custom 'retro-futuristic' grids.",
-    "4. For the R3F Scene: Make sure to wrap it in a pointer-events-none fixed container so it doesn't block UI interactions. Use 'Stars' and 'Sphere' from '@react-three/drei'.",
-    "5. CRITICAL: Do NOT use Shadcn Card components for the main visual elements if they force rounded corners. Use raw divs with border-radius: 0 to maintain the aggressive gaming UI aesthetic. You can use Shadcn for standard form inputs/dialogs but heavy customization is required to remove the default rounded look.",
-    "6. Include framer-motion strictly on direct children of layout wrappers.",
-    "7. Do NOT include ANY image placeholders, dummy images, or external images. The R3F 3D background is the sole visual anchor.",
-    "8. Implement every single data-testid string provided above in the final JSX elements.",
-    "9. Use lucide-react for icons, specifically targeting high-tech/gaming style icons (e.g., Terminal, Crosshair, Zap, Gamepad)."
+    "INSTALL FONTS: MUST use 'Unbounded' for headings and 'Outfit' for body. Update Google Fonts import in index.html.",
+    "3D HERO: Implement a React Three Fiber scene in the hero. Use abstract geometric shapes with a MeshStandardMaterial (color: '#53FC18', emissive: '#53FC18', wireframe: true or glowing). Use <Float> and <Environment> from drei.",
+    "UI COMPONENTS: Use Tailwind + HTML for the main layout. Use Shadcn for modals (like the Submit Clip form).",
+    "KICK IFRAME: Use a placeholder or actual iframe approach for rendering Kick clips in the grid.",
+    "TESTING: MUST include 'data-testid' on all interactive elements (submit-clip-btn, upvote-btn-1, etc.).",
+    "STYLING RULE: No pure white backgrounds. Everything is deep black (#050505). No Inter font. Use aggressive padding.",
+    "TELEGRAM MOCK: The login should mock a Telegram flow (e.g., 'Login with Telegram' button that just sets a mock user state)."
   ]
 }

@@ -1,0 +1,20 @@
+{
+  "summary": "Backend-only verification of check_channel_membership fix: bot is 'left' in @thesvjbaris and 'administrator' in @thesvjduyuru (confirmed via Telegram API). Fix correctly skips channels where bot itself is not a member. All targeted endpoints behave as expected.",
+  "tested_scope": ["backend", "integration"],
+  "passed": [
+    "GET /api/config -> 200 with required_channels=['@thesvjduyuru','@thesvjbaris']",
+    "POST /api/auth/verify-code with invalid code 'ZZZZZZ' -> 404 'Kod bulunamadı veya süresi doldu'",
+    "Telegram getMe sanity -> ok=true, bot_id=8948338148 (sjclip_bot)",
+    "Telegram getChatMember(bot,@thesvjbaris) -> status='left' (confirms scenario)",
+    "Telegram getChatMember(bot,@thesvjduyuru) -> status='administrator' (confirms scenario)",
+    "GET /api/auth/check-channels with X-User-Id of test user (telegram_id=99999999) -> 200 {'missing_channels':[], 'telegram_linked':true}. @thesvjbaris correctly OMITTED (bot is 'left' there, skipped). @thesvjduyuru also omitted because getChatMember returns ok=false for fake user_id -> code falls into 'skip on API error' branch (expected per request note).",
+    "POST /api/clips/{id}/vote with X-User-Id of user lacking telegram_id -> 403 detail={'error':'telegram_required','missing_channels':['@thesvjduyuru','@thesvjbaris']} — prior gating behavior preserved",
+    "POST /api/clips/{id}/vote without auth -> 401 'Authentication required'"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "skipped"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "Test users (t1-tg-user, t1-no-tg-user) and test clip (t1-test-clip) inserted and cleaned up successfully (2 users + 1 clip deleted). Frontend not tested per request (testing_type=backend only)."
+}

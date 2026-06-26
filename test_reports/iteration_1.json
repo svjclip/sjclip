@@ -1,0 +1,40 @@
+{
+  "summary": "First-finish smoke testing of CLIPSTORM clip voting platform. All 8 backend endpoints behave per spec; all primary frontend flows (3D hero, login, submit, vote, leaderboard nav) work end-to-end on the public preview URL.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "GET /api/config returns streamer_name=CLIPSTORM and current_week_key=2026-W26",
+    "POST /api/auth/mock-login is idempotent per username (same id returned on repeat)",
+    "GET /api/auth/me returns user with X-User-Id and null without header",
+    "POST /api/clips: 401 without auth, 400 on invalid URL, 200 with parsed kick_clip_id, 409 on duplicate",
+    "GET /api/clips supports sort=top and sort=new, includes has_voted field",
+    "POST /api/clips/{id}/vote increments votes, 409 on double-vote, 401 without auth",
+    "DELETE /api/clips/{id}/vote decrements votes and clears has_voted",
+    "GET /api/leaderboard/weekly returns current week clips",
+    "GET /api/clips/{id} returns single clip with has_voted",
+    "Frontend: hero-section + 3D <canvas> render, feed-section + sort-top/new buttons present",
+    "Frontend: login dialog -> user-chip displayed with username after submit",
+    "Frontend: submit-clip dialog accepts valid Kick URL, new clip appears in feed (count went 3->4)",
+    "Frontend: upvote click increments vote-count from 0 to 1 in UI",
+    "Frontend: nav-leaderboard navigates to /leaderboard and renders leaderboard-winner-card"
+  ],
+  "failed": [
+    {
+      "area": "Frontend - SubmitClipDialog invalid URL feedback",
+      "issue": "On invalid Kick URL submission, no element matching .error/[class*=error]/[role=alert] was found. Error is likely shown via toast (sonner) which may or may not be reaching the user; not verifiable via standard error selectors.",
+      "evidence": "Invalid URL error indicator: NONE in playwright run; valid submission immediately after worked.",
+      "priority": "LOW"
+    }
+  ],
+  "action_items": [
+    "Optional: add a data-testid or role=alert on the SubmitClipDialog inline error/toast so error UX is verifiable and accessible.",
+    "Minor: three.js console warning 'THREE.Clock deprecated, use THREE.Timer' - cosmetic, can be addressed later."
+  ],
+  "success_rate": {"backend": "100%", "frontend": "~95%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": {
+    "auth_mode": "MOCKED username login (Phase 2 will replace with Telegram). Documented in UI footer 'Telegram verification - Phase 2'.",
+    "test_credentials_file": "Present but empty - not needed for mock auth.",
+    "clip_detail_page": "Not explicitly navigated to in this iteration but route exists; backend GET /api/clips/{id} verified."
+  }
+}
