@@ -3,21 +3,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
-import { Send, ShieldCheck, ExternalLink, ArrowRight, KeyRound, UserPlus, LogIn, ArrowLeft } from "lucide-react";
+import { Send, ArrowRight, KeyRound, UserPlus, LogIn, ArrowLeft } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { api, formatApiError } from "../lib/api";
 import { toast } from "sonner";
-import ChannelGateDialog from "./ChannelGateDialog";
-
-const NEON = "#53FC18";
 
 export default function LoginDialog({ open, onOpenChange, defaultTab = "login" }) {
-  const { passwordLogin, register, verifyTelegramCode, forgotPassword, resetPassword } = useAuth();
+  const { passwordLogin, register, forgotPassword, resetPassword } = useAuth();
   const [botUsername, setBotUsername] = useState("");
   const [tab, setTab] = useState(defaultTab);
   const [busy, setBusy] = useState(false);
-  const [gateOpen, setGateOpen] = useState(false);
-  const [missing, setMissing] = useState([]);
   // forgot password sub-flow
   const [forgotMode, setForgotMode] = useState(false);
   const [forgotStep, setForgotStep] = useState(1);
@@ -31,18 +26,13 @@ export default function LoginDialog({ open, onOpenChange, defaultTab = "login" }
   const [regPassword, setRegPassword] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPhone, setRegPhone] = useState("");
-  // telegram
-  const [code, setCode] = useState("");
   // forgot
   const [forgotUsername, setForgotUsername] = useState("");
   const [resetCode, setResetCode] = useState("");
   const [resetPwd, setResetPwd] = useState("");
 
   useEffect(() => {
-    api
-      .get("/config")
-      .then((r) => setBotUsername(r.data.telegram_bot_username || ""))
-      .catch(() => {});
+    api.get("/config").then((r) => setBotUsername(r.data.telegram_bot_username || "")).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -53,13 +43,9 @@ export default function LoginDialog({ open, onOpenChange, defaultTab = "login" }
     }
   }, [open, defaultTab]);
 
-  const closeAndMaybeGate = (data) => {
-    onOpenChange(false);
-    if (data.missing_channels?.length) {
-      setMissing(data.missing_channels);
-      setGateOpen(true);
-    }
-  };
+  // If the post-register Telegram link dialog needs to open: just close login —
+  // GlobalTelegramGate in App.js will detect missing telegram_id / channels and open the dialog.
+  const closeAfterAuth = () => onOpenChange(false);
 
   const submitLogin = async (e) => {
     e?.preventDefault();
@@ -67,7 +53,7 @@ export default function LoginDialog({ open, onOpenChange, defaultTab = "login" }
     try {
       const data = await passwordLogin(loginUsername.trim(), loginPassword);
       toast.success(`Tekrar hoş geldin, ${data.user.username}`);
-      closeAndMaybeGate(data);
+      closeAfterAuth();
     } catch (err) {
       toast.error(formatApiError(err?.response?.data?.detail, "Giriş başarısız"));
     } finally {
@@ -86,29 +72,9 @@ export default function LoginDialog({ open, onOpenChange, defaultTab = "login" }
         phone: regPhone.trim(),
       });
       toast.success(`Hoş geldin, ${data.user.username}! Şimdi Telegram bağla.`);
-      closeAndMaybeGate(data);
+      closeAfterAuth();
     } catch (err) {
       toast.error(formatApiError(err?.response?.data?.detail, "Kayıt başarısız"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const submitTelegramCode = async (e) => {
-    e?.preventDefault();
-    const clean = code.trim().toUpperCase();
-    if (clean.length !== 6) {
-      toast.error("Kod 6 karakter olmalı");
-      return;
-    }
-    setBusy(true);
-    try {
-      const data = await verifyTelegramCode(clean);
-      toast.success(`Hoş geldin, ${data.user.username}`);
-      setCode("");
-      closeAndMaybeGate(data);
-    } catch (err) {
-      toast.error(formatApiError(err?.response?.data?.detail, "Doğrulama başarısız"));
     } finally {
       setBusy(false);
     }
@@ -140,29 +106,10 @@ export default function LoginDialog({ open, onOpenChange, defaultTab = "login" }
       setResetCode("");
       setResetPwd("");
       if (data.user?.missing_channels?.length) {
-        setMissing(data.user.missing_channels);
-        setGateOpen(true);
+        // GlobalTelegramGate will handle the channel step
       }
     } catch (err) {
       toast.error(formatApiError(err?.response?.data?.detail, "Sıfırlama başarısız"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const recheck = async () => {
-    setBusy(true);
-    try {
-      const res = await api.get("/auth/check-channels");
-      if (res.data.missing_channels?.length === 0) {
-        toast.success("Harika! Artık oy verebilirsin.");
-        setGateOpen(false);
-      } else {
-        setMissing(res.data.missing_channels);
-        toast.error("Hâlâ eksik kanal(lar) var");
-      }
-    } catch {
-      toast.error("Kontrol başarısız");
     } finally {
       setBusy(false);
     }
@@ -197,7 +144,7 @@ export default function LoginDialog({ open, onOpenChange, defaultTab = "login" }
           {!forgotMode && (
             <Tabs value={tab} onValueChange={setTab} className="w-full">
               <TabsList
-                className="grid grid-cols-3 bg-black border border-white/10 rounded-none p-0 h-auto"
+                className="grid grid-cols-2 bg-black border border-white/10 rounded-none p-0 h-auto"
                 data-testid="auth-tabs"
               >
                 <TabsTrigger
@@ -205,21 +152,14 @@ export default function LoginDialog({ open, onOpenChange, defaultTab = "login" }
                   className="rounded-none data-[state=active]:bg-[#53FC18] data-[state=active]:text-black font-bold uppercase text-xs tracking-wider py-3"
                   data-testid="tab-login"
                 >
-                  <LogIn className="w-3.5 h-3.5 mr-1" /> Giriş
+                  <LogIn className="w-3.5 h-3.5 mr-1" /> Giriş Yap
                 </TabsTrigger>
                 <TabsTrigger
                   value="register"
                   className="rounded-none data-[state=active]:bg-[#53FC18] data-[state=active]:text-black font-bold uppercase text-xs tracking-wider py-3"
                   data-testid="tab-register"
                 >
-                  <UserPlus className="w-3.5 h-3.5 mr-1" /> Kayıt
-                </TabsTrigger>
-                <TabsTrigger
-                  value="telegram"
-                  className="rounded-none data-[state=active]:bg-[#53FC18] data-[state=active]:text-black font-bold uppercase text-xs tracking-wider py-3"
-                  data-testid="tab-telegram"
-                >
-                  <Send className="w-3.5 h-3.5 mr-1" /> Telegram
+                  <UserPlus className="w-3.5 h-3.5 mr-1" /> Kayıt Ol
                 </TabsTrigger>
               </TabsList>
 
@@ -326,64 +266,9 @@ export default function LoginDialog({ open, onOpenChange, defaultTab = "login" }
                     {busy ? "..." : (<>Hesap Oluştur <ArrowRight className="w-4 h-4 ml-1.5" /></>)}
                   </Button>
                   <p className="text-[11px] text-zinc-600 text-center mt-2 leading-relaxed">
-                    Kayıttan sonra oy vermek için Telegram bağlaman gerekecek.
+                    Kayıt sonrası Telegram bağlama adımı zorunlu olarak açılacak.
                   </p>
                 </form>
-              </TabsContent>
-
-              {/* TELEGRAM */}
-              <TabsContent value="telegram" className="mt-4 space-y-3">
-                <div
-                  className="border border-[#53FC18]/20 bg-[#53FC18]/5 p-3 flex gap-2 text-xs text-zinc-300 rounded-none"
-                  data-testid="telegram-notice"
-                >
-                  <ShieldCheck className="w-4 h-4 text-[#53FC18] flex-shrink-0 mt-0.5" />
-                  <span>Profil/telefon paylaşımı yok. Sadece bota /start yazıp kodunu al.</span>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <div className="w-7 h-7 bg-[#53FC18] text-black font-bold flex items-center justify-center text-sm flex-shrink-0">1</div>
-                  <div className="flex-1">
-                    <div className="font-display font-bold text-sm mb-2">Bota git ve <span className="text-[#53FC18]">/start</span> yaz</div>
-                    <a
-                      href={botUsername ? `https://t.me/${botUsername}` : "#"}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 w-full justify-center px-4 py-3 bg-[#229ED9] hover:bg-[#1d8bc0] text-white font-bold transition-all"
-                      data-testid="tg-bot-deeplink"
-                    >
-                      <Send className="w-4 h-4" />
-                      @{botUsername || "..."} botunu aç
-                      <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-                    </a>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <div className="w-7 h-7 bg-[#53FC18] text-black font-bold flex items-center justify-center text-sm flex-shrink-0">2</div>
-                  <div className="flex-1">
-                    <div className="font-display font-bold text-sm mb-2">Aldığın 6 haneli kodu yapıştır</div>
-                    <form onSubmit={submitTelegramCode} className="flex gap-2">
-                      <Input
-                        value={code}
-                        onChange={(e) => setCode(e.target.value.toUpperCase())}
-                        placeholder="ABC123"
-                        maxLength={6}
-                        className="bg-black border-white/10 focus:border-[#53FC18] text-white h-12 font-mono text-center text-lg tracking-[0.4em] uppercase rounded-none"
-                        data-testid="verify-code-input"
-                      />
-                      <Button
-                        type="submit"
-                        disabled={busy}
-                        className="h-12 px-5 bg-[#53FC18] text-black font-bold hover:bg-[#42cc13] rounded-none"
-                        data-testid="verify-code-btn"
-                      >
-                        {busy ? "..." : (<>Doğrula <ArrowRight className="w-4 h-4 ml-1" /></>)}
-                      </Button>
-                    </form>
-                  </div>
-                </div>
-                <p className="text-[11px] text-zinc-600 text-center font-mono mt-2">Kod 15 dakika geçerli</p>
               </TabsContent>
             </Tabs>
           )}
@@ -474,14 +359,6 @@ export default function LoginDialog({ open, onOpenChange, defaultTab = "login" }
           )}
         </DialogContent>
       </Dialog>
-
-      <ChannelGateDialog
-        open={gateOpen}
-        onOpenChange={setGateOpen}
-        missingChannels={missing}
-        onRecheck={recheck}
-        busy={busy}
-      />
     </>
   );
 }

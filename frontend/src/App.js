@@ -10,12 +10,23 @@ import HomePage from "./pages/HomePage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import ClipDetailPage from "./pages/ClipDetailPage";
 import SetPasswordDialog from "./components/SetPasswordDialog";
+import TelegramLinkDialog from "./components/TelegramLinkDialog";
 
 function GlobalSetPasswordGate() {
   const { user, needsPasswordSetup } = useAuth();
   // Only show if a Telegram-only legacy user is logged in but has no password yet
   const show = !!user && needsPasswordSetup && !user.has_password;
   return <SetPasswordDialog open={show} />;
+}
+
+function GlobalTelegramGate() {
+  const { user, missingChannels, needsPasswordSetup, loading } = useAuth();
+  // Don't fight with set-password modal (it must run first)
+  if (loading || !user || needsPasswordSetup) return null;
+  const needsTelegram = !user.telegram_id;
+  const needsChannels = (missingChannels || []).length > 0;
+  const show = needsTelegram || needsChannels;
+  return <TelegramLinkDialog open={show} onOpenChange={() => {}} allowSkip={false} />;
 }
 
 function AppShell() {
@@ -42,6 +53,7 @@ function AppShell() {
         <Footer streamerName={streamerName} />
       </BrowserRouter>
       <GlobalSetPasswordGate />
+      <GlobalTelegramGate />
       <Toaster
         theme="dark"
         position="bottom-right"
