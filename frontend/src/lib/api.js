@@ -18,10 +18,11 @@ api.interceptors.request.use((config) => {
 });
 
 export function parseKickClipId(url) {
+  // Frontend-side preview check — only the allowed streamer (must match backend ALLOWED_KICK_STREAMER).
+  const allowed = "slotjack";
   const patterns = [
-    /kick\.com\/[^/]+\/clips\/(clip_[A-Za-z0-9]+)/,
-    /kick\.com\/clips\/(clip_[A-Za-z0-9]+)/,
-    /kick\.com\/[^/]+\/clip\/(clip_[A-Za-z0-9]+)/,
+    new RegExp(`kick\\.com/@?${allowed}/clips/(clip_[A-Za-z0-9]+)`, "i"),
+    new RegExp(`kick\\.com/@?${allowed}/clip/(clip_[A-Za-z0-9]+)`, "i"),
   ];
   for (const p of patterns) {
     const m = url.match(p);

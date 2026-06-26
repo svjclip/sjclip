@@ -39,6 +39,10 @@ JWT_ALGORITHM = "HS256"
 JWT_ACCESS_TTL_DAYS = 30
 USERNAME_REGEX = re.compile(r"^[A-Za-z0-9_]{3,30}$")
 PHONE_REGEX = re.compile(r"^\+?[0-9\s\-()]{7,20}$")
+# Only clips from this Kick streamer are accepted — bypasses moderation
+ALLOWED_KICK_STREAMER = os.environ.get('ALLOWED_KICK_STREAMER', 'slotjack').lower()
+# Community counter cosmetic offset (so the public never sees the real number)
+COMMUNITY_DISPLAY_OFFSET = int(os.environ.get('COMMUNITY_DISPLAY_OFFSET', '1247'))
 
 app = FastAPI(title=f"{STREAMER_NAME} Clip Voting API")
 api_router = APIRouter(prefix="/api")
@@ -146,14 +150,23 @@ class ClipPublic(BaseModel):
 
 
 # ----------------- Helpers -----------------
-KICK_CLIP_PATTERNS = [
-    re.compile(r"kick\.com/[^/]+/clips/(clip_[A-Za-z0-9]+)"),
-    re.compile(r"kick\.com/clips/(clip_[A-Za-z0-9]+)"),
-    re.compile(r"kick\.com/[^/]+/clip/(clip_[A-Za-z0-9]+)"),
-]
+# Only accept clips from the allowed Kick streamer (ALLOWED_KICK_STREAMER env var).
+# We do not parse arbitrary streamers — any other URL pattern returns (None, None).
+def _kick_streamer_patterns(streamer: str):
+    s = re.escape(streamer)
+    return [
+        re.compile(rf"kick\.com/@?{s}/clips/(clip_[A-Za-z0-9]+)", re.IGNORECASE),
+        re.compile(rf"kick\.com/@?{s}/clip/(clip_[A-Za-z0-9]+)", re.IGNORECASE),
+    ]
+
+
+KICK_CLIP_PATTERNS = _kick_streamer_patterns(ALLOWED_KICK_STREAMER)
 
 
 def parse_kick_clip_id(url: str) -> Optional[str]:
+    """Return clip_id only if URL belongs to the allowed Kick streamer; else None."""
+    if not url:
+        return None
     for pattern in KICK_CLIP_PATTERNS:
         m = pattern.search(url)
         if m:
@@ -834,22 +847,27 @@ async def me(user: Optional[User] = Depends(get_current_user)):
 
 @api_router.post("/clips", response_model=ClipPublic)
 async def submit_clip(payload: ClipCreate, user: User = Depends(require_user)):
-    # Gate: must be linked to Telegram AND member of all required channels
+    # 1) Validate the URL belongs to the allowed Kick streamer BEFORE the gate so users get clear feedback
+    clip_id = parse_kick_clip_id(payload.kick_url)
+    if not clip_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Sadece @{ALLOWED_KICK_STREAMER} klipleri kabul edilir. Beklenen format: https://kick.com/{ALLOWED_KICK_STREAMER}/clips/clip_XXXX",
+        )
+    title = payload.title.strip()
+    if not title or len(title) > 120:
+        raise HTTPException(status_code=400, detail="Başlık 1-120 karakter olmalı")
+    # 2) Gate: must be linked to Telegram AND member of all required channels
     if REQUIRED_CHANNELS:
         if not user.telegram_id:
             raise HTTPException(status_code=403, detail={"error": "telegram_required", "missing_channels": REQUIRED_CHANNELS})
         missing = await check_channel_membership(int(user.telegram_id))
         if missing:
             raise HTTPException(status_code=403, detail={"error": "missing_channels", "missing_channels": missing})
-    clip_id = parse_kick_clip_id(payload.kick_url)
-    if not clip_id:
-        raise HTTPException(status_code=400, detail="Invalid Kick clip URL. Expected format: https://kick.com/<streamer>/clips/clip_XXXX")
+    # 3) De-dup
     existing = await db.clips.find_one({"kick_clip_id": clip_id}, {"_id": 0})
     if existing:
-        raise HTTPException(status_code=409, detail="This clip has already been submitted")
-    title = payload.title.strip()
-    if not title or len(title) > 120:
-        raise HTTPException(status_code=400, detail="Title must be 1-120 characters")
+        raise HTTPException(status_code=409, detail="Bu klip daha önce gönderilmiş")
     clip = Clip(
         kick_url=payload.kick_url.strip(),
         kick_clip_id=clip_id,
@@ -888,7 +906,12 @@ async def get_clip(clip_id: str, user: Optional[User] = Depends(get_current_user
 
 @api_router.post("/clips/{clip_id}/vote", response_model=ClipPublic)
 async def vote_clip(clip_id: str, user: User = Depends(require_user)):
-    # Gate: must be linked to Telegram AND member of all required channels
+    """Cast a vote. Hardened against:
+    - duplicate votes (unique index + atomic try/except)
+    - self-voting
+    - votes on past-week clips (only current week is voteable)
+    - votes from accounts without Telegram + required channels
+    """
     if REQUIRED_CHANNELS:
         if not user.telegram_id:
             raise HTTPException(status_code=403, detail={"error": "telegram_required", "missing_channels": REQUIRED_CHANNELS})
@@ -897,29 +920,55 @@ async def vote_clip(clip_id: str, user: User = Depends(require_user)):
             raise HTTPException(status_code=403, detail={"error": "missing_channels", "missing_channels": missing})
     doc = await db.clips.find_one({"id": clip_id}, {"_id": 0})
     if not doc:
-        raise HTTPException(status_code=404, detail="Clip not found")
-    existing_vote = await db.votes.find_one({"clip_id": clip_id, "user_id": user.id})
-    if existing_vote:
-        raise HTTPException(status_code=409, detail="You have already voted for this clip")
-    await db.votes.insert_one({
-        "clip_id": clip_id,
-        "user_id": user.id,
-        "created_at": now_iso(),
-    })
-    await db.clips.update_one({"id": clip_id}, {"$inc": {"votes_count": 1}})
-    doc["votes_count"] += 1
-    return await attach_vote_status(doc, user.id)
+        raise HTTPException(status_code=404, detail="Klip bulunamadı")
+    # Self-vote guard
+    if doc.get("submitter_id") == user.id:
+        raise HTTPException(status_code=403, detail="Kendi klibine oy veremezsin")
+    # Week gate: only this week's clips can be voted on (contest integrity)
+    if doc.get("week_key") != current_week_key():
+        raise HTTPException(status_code=403, detail="Sadece bu haftaki kliplere oy verilebilir")
+    # Atomic vote: rely on the (clip_id, user_id) unique index to enforce one-vote-per-user.
+    try:
+        await db.votes.insert_one({
+            "clip_id": clip_id,
+            "user_id": user.id,
+            "created_at": now_iso(),
+        })
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Bu klibe zaten oy verdin")
+    # Only increment after the insert succeeded
+    res = await db.clips.find_one_and_update(
+        {"id": clip_id},
+        {"$inc": {"votes_count": 1}},
+        return_document=True,
+        projection={"_id": 0},
+    )
+    if not res:
+        # Clip was deleted in between — undo the vote
+        await db.votes.delete_one({"clip_id": clip_id, "user_id": user.id})
+        raise HTTPException(status_code=404, detail="Klip bulunamadı")
+    return await attach_vote_status(res, user.id)
 
 
 @api_router.delete("/clips/{clip_id}/vote", response_model=ClipPublic)
 async def unvote_clip(clip_id: str, user: User = Depends(require_user)):
+    """Retract a vote. Only allowed on current-week clips so historical results stay stable."""
     doc = await db.clips.find_one({"id": clip_id}, {"_id": 0})
     if not doc:
-        raise HTTPException(status_code=404, detail="Clip not found")
+        raise HTTPException(status_code=404, detail="Klip bulunamadı")
+    if doc.get("week_key") != current_week_key():
+        raise HTTPException(status_code=403, detail="Sadece bu haftaki kliplerden oy çekilebilir")
+    # Atomic: only decrement if we actually deleted a vote
     result = await db.votes.delete_one({"clip_id": clip_id, "user_id": user.id})
     if result.deleted_count:
-        await db.clips.update_one({"id": clip_id}, {"$inc": {"votes_count": -1}})
-        doc["votes_count"] = max(0, doc["votes_count"] - 1)
+        res = await db.clips.find_one_and_update(
+            {"id": clip_id, "votes_count": {"$gt": 0}},
+            {"$inc": {"votes_count": -1}},
+            return_document=True,
+            projection={"_id": 0},
+        )
+        if res:
+            doc = res
     return await attach_vote_status(doc, user.id)
 
 
@@ -935,13 +984,19 @@ async def weekly_leaderboard(user: Optional[User] = Depends(get_current_user)):
 # ----------------- Stats / Profile / Reports -----------------
 @api_router.get("/stats/community")
 async def community_stats():
-    """Public counter for landing/onboarding gamification."""
-    total = await db.users.count_documents({})
-    fully_onboarded = await db.users.count_documents({"telegram_id": {"$type": "string"}})
+    """Public counter for landing/onboarding gamification.
+    Real counts are NOT exposed — the response contains cosmetic "displayed" values
+    inflated by COMMUNITY_DISPLAY_OFFSET so the public never sees the exact backend count.
+    """
+    real_total = await db.users.count_documents({})
+    real_telegram = await db.users.count_documents({"telegram_id": {"$type": "string"}})
+    # Stable inflation: each real user adds ~3 visible members for the public counter
+    displayed_total = real_total * 3 + COMMUNITY_DISPLAY_OFFSET
+    displayed_telegram = real_telegram * 3 + COMMUNITY_DISPLAY_OFFSET
     return {
-        "total_members": total,
-        "telegram_linked": fully_onboarded,
-        "next_position": total + 1,
+        "total_members": displayed_total,
+        "telegram_linked": displayed_telegram,
+        "next_position": displayed_telegram + 1,
     }
 
 

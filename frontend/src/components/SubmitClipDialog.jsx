@@ -23,7 +23,7 @@ export default function SubmitClipDialog({ open, onOpenChange }) {
     }
     const clipId = parseKickClipId(kickUrl);
     if (!clipId) {
-      toast.error("Geçersiz Kick linki. Format: kick.com/<yayıncı>/clips/clip_XXXX");
+      toast.error("Sadece @slotjack klipleri kabul edilir. Format: kick.com/slotjack/clips/clip_XXXX");
       return;
     }
     if (title.trim().length < 1) {
@@ -77,11 +77,12 @@ export default function SubmitClipDialog({ open, onOpenChange }) {
               <Input
                 value={kickUrl}
                 onChange={(e) => setKickUrl(e.target.value)}
-                placeholder="https://kick.com/streamer/clips/clip_01H..."
+                placeholder="https://kick.com/slotjack/clips/clip_01H..."
                 className="bg-black border-white/10 focus:border-[#53FC18] text-white h-12 pl-9 font-mono text-sm rounded-none"
                 data-testid="clip-submit-url-input"
               />
             </div>
+            <p className="text-[11px] text-zinc-500 mt-1.5 font-mono">Sadece @slotjack klipleri kabul edilir.</p>
           </div>
           <div>
             <label className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2 block">Başlık</label>

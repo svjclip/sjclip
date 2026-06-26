@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { motion } from "framer-motion";
-import { ChevronUp, ExternalLink, Play, Flag } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChevronUp, ExternalLink, Play, Flag, Check } from "lucide-react";
 import { Link } from "react-router-dom";
-import { api, kickEmbedUrl } from "../lib/api";
+import { api, kickEmbedUrl, formatApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -19,6 +19,7 @@ export default function ClipCard({ clip, rank }) {
   const [gateOpen, setGateOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [missing, setMissing] = useState([]);
+  const [showVotedFlash, setShowVotedFlash] = useState(false);
 
   const toggleVote = async (e) => {
     e.preventDefault();
@@ -37,6 +38,9 @@ export default function ClipCard({ clip, rank }) {
         const res = await api.post(`/clips/${clip.id}/vote`);
         setVoted(true);
         setVotes(res.data.votes_count);
+        // Burst confirmation animation
+        setShowVotedFlash(true);
+        setTimeout(() => setShowVotedFlash(false), 1100);
       }
       qc.invalidateQueries({ queryKey: ["clips"] });
       qc.invalidateQueries({ queryKey: ["leaderboard"] });
@@ -46,7 +50,7 @@ export default function ClipCard({ clip, rank }) {
         setMissing(detail.missing_channels);
         setGateOpen(true);
       } else {
-        toast.error(typeof detail === "string" ? detail : "Oy verilemedi");
+        toast.error(formatApiError(detail, "Oy verilemedi"));
       }
     } finally {
       setBusy(false);
@@ -111,6 +115,40 @@ export default function ClipCard({ clip, rank }) {
             <div className="absolute bottom-3 right-3 px-2 py-0.5 rounded bg-black/60 text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Kick Klip</div>
           </button>
         )}
+
+        {/* Vote confirmation overlay */}
+        <AnimatePresence>
+          {showVotedFlash && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="absolute inset-0 z-20 flex items-center justify-center bg-[#53FC18]/15 backdrop-blur-[2px] pointer-events-none"
+              data-testid={`vote-confirm-overlay-${clip.id}`}
+            >
+              <motion.div
+                initial={{ scale: 0.3, rotate: -25, opacity: 0 }}
+                animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                exit={{ scale: 1.4, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 360, damping: 16 }}
+                className="flex flex-col items-center gap-2"
+              >
+                <div className="w-20 h-20 rounded-full bg-[#53FC18] shadow-[0_0_60px_rgba(83,252,24,0.8)] flex items-center justify-center">
+                  <Check className="w-12 h-12 text-black" strokeWidth={4} />
+                </div>
+                <motion.span
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.15 }}
+                  className="font-display font-black text-[#53FC18] text-lg uppercase tracking-wider drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]"
+                >
+                  Oy verildi
+                </motion.span>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <div className="p-4 lg:p-5 space-y-3">
@@ -160,16 +198,36 @@ export default function ClipCard({ clip, rank }) {
             <motion.button
               onClick={toggleVote}
               disabled={busy}
-              whileTap={{ scale: 0.9 }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-mono text-sm font-bold transition-all ${
+              whileTap={{ scale: 0.88 }}
+              whileHover={{ y: -2 }}
+              animate={voted ? { boxShadow: ["0 0 0 rgba(83,252,24,0.4)","0 0 28px rgba(83,252,24,0.6)","0 0 0 rgba(83,252,24,0.4)"] } : {}}
+              transition={{ duration: 1.8, repeat: voted ? Infinity : 0, ease: "easeInOut" }}
+              className={`relative overflow-hidden flex items-center gap-1.5 pl-2.5 pr-3.5 py-1.5 rounded-full font-mono text-sm font-bold transition-colors ${
                 voted
-                  ? "bg-[#53FC18] text-black border-[#53FC18] shadow-[0_0_15px_rgba(83,252,24,0.4)]"
-                  : "bg-white/5 text-white border-white/10 hover:border-[#53FC18]/50 hover:bg-[#53FC18]/10"
-              }`}
+                  ? "bg-gradient-to-r from-[#53FC18] to-[#42cc13] text-black border border-[#53FC18]"
+                  : "bg-white/5 text-white border border-white/10 hover:border-[#53FC18]/50 hover:bg-[#53FC18]/10"
+              } disabled:opacity-50`}
               data-testid={`upvote-btn-${clip.id}`}
+              aria-pressed={voted}
             >
-              <ChevronUp className="w-4 h-4" />
-              <span data-testid={`vote-count-${clip.id}`}>{votes}</span>
+              <motion.span
+                key={voted ? "v" : "u"}
+                initial={{ rotate: voted ? -180 : 0, scale: 0.5 }}
+                animate={{ rotate: 0, scale: 1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 14 }}
+                className="inline-flex"
+              >
+                {voted ? <Check className="w-4 h-4" strokeWidth={3} /> : <ChevronUp className="w-4 h-4" />}
+              </motion.span>
+              <motion.span
+                key={`count-${votes}`}
+                initial={{ y: -8, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.2 }}
+                data-testid={`vote-count-${clip.id}`}
+              >
+                {votes}
+              </motion.span>
             </motion.button>
           </div>
         </div>
