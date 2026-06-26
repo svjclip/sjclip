@@ -29,6 +29,40 @@ SVJ adlı Kick yayıncısı için topluluk klip oylama platformu. Kullanıcılar
 
 ## Implementation History
 
+### Phase 7 — Contest Hardening + Slotjack Lock + Vote UX (DONE — 2026-06-26)
+**Backend güvenliği (yarışma için)**
+- `ALLOWED_KICK_STREAMER` env (default: `slotjack`) — `parse_kick_clip_id` sadece slotjack URL'lerini kabul ediyor (case-insensitive, `@slotjack` ve `slotjack` ikisi de). Diğer yayıncılar 400 + Türkçe mesaj.
+- Submit_clip: URL parse → gate sıralaması (yanlış URL'de Telegram-bağlı olmayan kullanıcı bile net feedback alır).
+- Vote_clip yarışma gate'leri:
+  - **Self-vote engeli**: 403 "Kendi klibine oy veremezsin" (clip.submitter_id == user.id)
+  - **Hafta gate**: 403 "Sadece bu haftaki kliplere oy verilebilir" (clip.week_key != current_week)
+  - **Atomic vote**: existing check kaldırıldı; insert try/except DuplicateKeyError → 409; sadece insert başarılıysa $inc; race condition'da unique index korur
+  - Clip silinirse insert rollback (votes.delete)
+- Unvote_clip: sadece bu hafta klipleri için (403 past-week), `votes_count > 0` koruması (negatife düşmez)
+- Community counter şişirme: `displayed = real * 3 + 1247` (env `COMMUNITY_DISPLAY_OFFSET`) — gerçek DB sayısı asla açığa çıkmaz
+
+**Frontend (vote UX + profil)**
+- ClipCard yeni pill vote butonu: gradient yeşil + Check ikon (voted) / ChevronUp (unvoted) + sürekli soft glow (animate boxShadow infinite)
+- Vote confirmation overlay: 1.1s büyük ✓ + "Oy verildi" yazısı (framer-motion AnimatePresence + spring)
+- Vote count animasyonu: değer değişiminde slide-down
+- SubmitClipDialog: "Sadece @slotjack klipleri kabul edilir" uyarısı + slotjack placeholder
+- parseKickClipId (api.js): backend ile aynı regex — slotjack-only
+- ProfilePage zenginleştirme: 
+  - Hero: 28x28 avatar + Telegram badge overlay + büyük 6xl username + 3 mini rozet (joined date, "En iyi: N oy", "Bu hafta N klip")
+  - 4'lü stat grid: KLİP / TOPLAM OY (yeşil accent) / BU HAFTA OY / KLİP BAŞINA (avg)
+  - Vitrin section: en çok oy alan klip + büyük 7xl oy sayısı
+  - Tüm klipler grid (3 col)
+
+**Test Sonuçları (iteration_7.json)**
+- Backend: 19/19 (slotjack regex 5+4 kabul/red, inflated counter, self-vote 403, race-vote atomic, regression)
+- Frontend: 100% (profile testid+stats, pill button, overlay anim, anon-vote toast, inflated #1251 counter)
+
+### Phase 6 — Navbar Gate + Gamification + Profile + Reporting (DONE — 2026-06-26)
+**Backend**: `/api/stats/community`, `/api/users/{username}` (public profile), `/api/clips/{id}/report` (unique (clip_id, reporter_user_id))
+**Frontend**: Navbar fullyOnboarded gate (TELEGRAM BAĞLA rozeti), TelegramLinkDialog gamification counter, ProfilePage, ReportClipDialog (5 preset + freeform), ClipCard report button + profile link
+
+### Phase 5 — UX revize: Telegram tab kaldırıldı, zorunlu post-auth TelegramLinkDialog (DONE — 2026-06-26)
+
 ### Phase 1 — Foundation (DONE)
 - R3F 3D hero (yıldız + wireframe küre)
 - Mock username login (X-User-Id header)
