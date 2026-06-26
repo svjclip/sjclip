@@ -24,20 +24,27 @@ function GlobalSetPasswordGate() {
 
 function GlobalTelegramGate() {
   const { user, missingChannels, needsPasswordSetup, loading } = useAuth();
-  const [dismissed, setDismissed] = useState(false);
+  const dismissKey = user ? `svj:tg-gate-dismissed:${user.id}` : null;
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === "undefined" || !dismissKey) return false;
+    return window.sessionStorage.getItem(dismissKey) === "1";
+  });
 
-  // Kullanıcı veya gating durumu değiştiğinde "dismissed"ı sıfırla, böylece
-  // yeni eksiklikler (ör. çıkış/yeniden giriş) yeniden tetiklenir
+  // Kullanıcı veya gating durumu değiştiğinde sessionStorage'dan yeniden oku
   useEffect(() => {
-    setDismissed(false);
-  }, [user?.id, user?.telegram_id, (missingChannels || []).length]);
+    if (!dismissKey) { setDismissed(false); return; }
+    setDismissed(window.sessionStorage.getItem(dismissKey) === "1");
+  }, [dismissKey, user?.telegram_id, (missingChannels || []).length]);
 
   // Kullanıcı dilerse navbar'dan tekrar açabilsin
   useEffect(() => {
-    const open = () => setDismissed(false);
+    const open = () => {
+      if (dismissKey) window.sessionStorage.removeItem(dismissKey);
+      setDismissed(false);
+    };
     window.addEventListener("svj:open-telegram-gate", open);
     return () => window.removeEventListener("svj:open-telegram-gate", open);
-  }, []);
+  }, [dismissKey]);
 
   // Don't fight with set-password modal (it must run first)
   if (loading || !user || needsPasswordSetup) return null;
@@ -49,7 +56,12 @@ function GlobalTelegramGate() {
   return (
     <TelegramLinkDialog
       open={show}
-      onOpenChange={(v) => { if (!v) setDismissed(true); }}
+      onOpenChange={(v) => {
+        if (!v) {
+          if (dismissKey) window.sessionStorage.setItem(dismissKey, "1");
+          setDismissed(true);
+        }
+      }}
       allowSkip={true}
     />
   );

@@ -179,3 +179,9 @@ SVJ adlı Kick yayıncısı için topluluk klip oylama platformu. Kullanıcılar
 - Preview: `https://clips-auth-phase3.preview.emergentagent.com`
 - Bot: `https://t.me/sjclip_bot`
 - Channels: `https://t.me/thesvjduyuru`, `https://t.me/thesvjbaris`
+
+## Changelog
+### 2026-02-26 — Bug Fixes (Iter 11)
+- **BUG (Kick embed URL)**: `kickEmbedUrl()` in `frontend/src/lib/api.js` was returning `https://kick.com/clips/{id}/embed` (streamer-less ve geçersiz). Düzeltildi: artık resmi `https://player.kick.com/{clipId}` formatını döndürüyor. Klip videoları artık iframe içinde yüklenebiliyor.
+- **BUG (Telegram dialog tıkıyor)**: `GlobalTelegramGate` `allowSkip={false}` ile çağırılıyordu, X butonu ve 'Daha sonra' linki gizliydi. Düzeltildi: artık `allowSkip={true}`, sessionStorage destekli `dismissed` state ile kullanıcı dialog'u kapatabiliyor, navbar'daki yeni `nav-open-telegram-gate-btn` butonu ile (custom event `svj:open-telegram-gate`) istediğinde tekrar açabiliyor. Test ajanı `iteration_11.json` ile her iki düzeltmeyi de doğruladı.
+
