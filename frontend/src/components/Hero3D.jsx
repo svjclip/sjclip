@@ -46,14 +46,26 @@ export default function Hero3D() {
         </Suspense>
       </Canvas>
 
-      {/* Wireframe portrait, centered in the hero area, breathing slowly */}
+      {/* Wireframe portrait, centered in the hero area, gently floating */}
       <motion.img
         src="/svj-wireframe.png"
         alt=""
         aria-hidden="true"
-        initial={{ opacity: 0, scale: 1.04 }}
-        animate={{ opacity: 0.95, scale: 1 }}
-        transition={{ duration: 1.6, ease: "easeOut" }}
+        initial={{ opacity: 0, scale: 1.06 }}
+        animate={{
+          opacity: 0.95,
+          scale: [1, 1.025, 1],
+          y: [0, -10, 0, 8, 0],
+          x: [0, 6, 0, -6, 0],
+          rotate: [0, 0.6, 0, -0.6, 0],
+        }}
+        transition={{
+          opacity: { duration: 1.6, ease: "easeOut" },
+          scale: { duration: 9, repeat: Infinity, ease: "easeInOut" },
+          y: { duration: 12, repeat: Infinity, ease: "easeInOut" },
+          x: { duration: 14, repeat: Infinity, ease: "easeInOut" },
+          rotate: { duration: 16, repeat: Infinity, ease: "easeInOut" },
+        }}
         className="absolute inset-0 m-auto h-full w-auto max-w-none object-contain select-none"
         style={{
           WebkitMaskImage:
@@ -62,6 +74,7 @@ export default function Hero3D() {
             "radial-gradient(ellipse 55% 65% at 50% 45%, black 40%, rgba(0,0,0,0.8) 68%, transparent 92%)",
           mixBlendMode: "screen",
           filter: "drop-shadow(0 0 80px rgba(83,252,24,0.22))",
+          willChange: "transform",
         }}
         data-testid="hero-portrait"
       />
