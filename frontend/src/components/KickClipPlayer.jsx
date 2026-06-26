@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { Play, Loader2, AlertTriangle } from "lucide-react";
 import { api } from "../lib/api";
+import useClipThumbnail from "../lib/useClipThumbnail";
 
 /**
  * In-page Kick clip player.
@@ -28,21 +29,33 @@ import { api } from "../lib/api";
  */
 export default function KickClipPlayer({ clip, autoPlay = false }) {
   const [active, setActive] = useState(autoPlay);
+  const { ref: thumbRef, thumbnailUrl } = useClipThumbnail(active ? null : clip);
 
   if (!active) {
     return (
       <button
+        ref={thumbRef}
         type="button"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
           setActive(true);
         }}
-        className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-900 via-black to-zinc-900 group/play"
+        className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-900 via-black to-zinc-900 group/play overflow-hidden"
         data-testid={`clip-play-${clip.id}`}
         aria-label="Klibi oynat"
       >
-        <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_center,_rgba(83,252,24,0.3),_transparent_60%)]" />
+        {thumbnailUrl && (
+          <img
+            src={thumbnailUrl}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover opacity-90 group-hover/play:opacity-100 group-hover/play:scale-[1.03] transition-all duration-300"
+            data-testid={`clip-thumb-${clip.id}`}
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+        <div className="absolute inset-0 opacity-25 bg-[radial-gradient(circle_at_center,_rgba(83,252,24,0.35),_transparent_65%)] group-hover/play:opacity-40 transition-opacity" />
         <div className="relative w-16 h-16 rounded-full bg-[#53FC18] flex items-center justify-center transform transition-transform group-hover/play:scale-110 group-hover/play:shadow-[0_0_40px_rgba(83,252,24,0.6)]">
           <Play className="w-7 h-7 text-black ml-1" fill="black" />
         </div>
