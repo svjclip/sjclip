@@ -3,22 +3,30 @@ import Hls from "hls.js";
 import { Play, Loader2, AlertTriangle, RotateCcw } from "lucide-react";
 import { api } from "../lib/api";
 
-// Hardcoded production fallback parsed from REACT_APP_BACKEND_URL so we always
-// have a non-empty `parent` value for the Kick iframe handshake, even under
-// SSR/jsdom or when running on bare `localhost`.
-const PROD_HOSTNAME = (() => {
+// Kick's iframe parent parameter MUST be the FRONT-END domain (what the user
+// sees in their browser address bar), NOT the backend API domain. In a real
+// browser `window.location.hostname` is always correct; the env override +
+// hardcoded fallback exist only for SSR / jsdom / mis-configured dev setups
+// where window is unavailable or returns localhost.
+const HARDCODED_FRONTEND_DOMAIN = "clips-auth-phase3.preview.emergentagent.com";
+
+const FRONTEND_HOSTNAME_FALLBACK = (() => {
   try {
-    return new URL(process.env.REACT_APP_BACKEND_URL || "").hostname.toLowerCase() || "clips-auth-phase3.preview.emergentagent.com";
+    const envUrl = process.env.REACT_APP_FRONTEND_URL;
+    if (envUrl) {
+      const h = new URL(envUrl).hostname.toLowerCase();
+      if (h && h !== "localhost" && h !== "127.0.0.1") return h;
+    }
   } catch {
-    return "clips-auth-phase3.preview.emergentagent.com";
+    /* ignore */
   }
+  return HARDCODED_FRONTEND_DOMAIN;
 })();
 
 function getCleanDomain() {
   try {
     if (typeof window !== "undefined" && window.location && window.location.hostname) {
       const hostname = window.location.hostname.toLowerCase().replace(/:\d+$/, "");
-      // Reject empty / localhost which Kick rejects with "misconfigured".
       if (hostname && hostname !== "localhost" && hostname !== "127.0.0.1") {
         return hostname;
       }
@@ -26,7 +34,7 @@ function getCleanDomain() {
   } catch (e) {
     console.error("Failed to parse hostname, using fallback domain", e);
   }
-  return PROD_HOSTNAME;
+  return FRONTEND_HOSTNAME_FALLBACK;
 }
 
 /**
