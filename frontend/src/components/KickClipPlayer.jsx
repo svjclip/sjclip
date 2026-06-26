@@ -68,28 +68,61 @@ function HlsPlayer({ clip }) {
       : null;
 
   // Lazy-resolve the shard if we don't have it cached.
+  // First try the backend (it has a wide-open CloudFront reach). If that fails,
+  // fall back to client-side discovery from the user's own browser (which is
+  // exactly what Gemini was advocating — and is naturally unblocked because
+  // residential IPs are not on any of Kick's allowlists/blocklists for the
+  // public CDN).
   useEffect(() => {
     if (shard || resolving) return;
     let cancelled = false;
     setResolving(true);
     setError(null);
-    api
-      .post(`/clips/${clip.id}/resolve-shard`)
-      .then((r) => {
+
+    const clientDiscover = async () => {
+      const HEX = "0123456789abcdef";
+      const candidates = [];
+      for (const a of HEX) for (const b of HEX) candidates.push(a + b);
+      const controller = new AbortController();
+      const probe = (s) =>
+        fetch(
+          `https://clips.kick.com/clips/${s}/${clip.kick_clip_id}/playlist.m3u8`,
+          { method: "HEAD", mode: "cors", cache: "no-store", signal: controller.signal }
+        )
+          .then((r) => (r.ok ? s : null))
+          .catch(() => null);
+      const results = await Promise.all(candidates.map(probe));
+      controller.abort();
+      return results.find((s) => s) || null;
+    };
+
+    (async () => {
+      try {
+        const r = await api.post(`/clips/${clip.id}/resolve-shard`);
         if (cancelled) return;
-        if (r.data?.kick_shard) setShard(r.data.kick_shard);
+        if (r.data?.kick_shard) {
+          setShard(r.data.kick_shard);
+          return;
+        }
+      } catch {
+        // backend may be unreachable — fall through to client-side discovery
+      }
+      try {
+        const s = await clientDiscover();
+        if (cancelled) return;
+        if (s) setShard(s);
         else setError("Klip kaynağı bulunamadı (Kick'te silinmiş olabilir).");
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setError("Klip yüklenemedi.");
-      })
-      .finally(() => {
-        if (!cancelled) setResolving(false);
-      });
+      }
+    })().finally(() => {
+      if (!cancelled) setResolving(false);
+    });
+
     return () => {
       cancelled = true;
     };
-  }, [clip.id, shard, resolving]);
+  }, [clip.id, clip.kick_clip_id, shard, resolving]);
 
   useEffect(() => {
     if (!playlistUrl) return;
