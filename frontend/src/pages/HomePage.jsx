@@ -15,7 +15,10 @@ import SubmitClipDialog from "../components/SubmitClipDialog";
 
 export default function HomePage({ streamerName }) {
   const { user, missingChannels } = useAuth();
-  const fullyOnboarded = !!user && !!user.telegram_id && (missingChannels || []).length === 0;
+  // Admins bypass the Telegram + channel gates, so treat them as fully onboarded
+  // for hero CTA purposes (they should see "Klip Gönder", not "Telegram Bağla").
+  const fullyOnboarded =
+    !!user && (user.is_admin || (!!user.telegram_id && (missingChannels || []).length === 0));
   const [sort, setSort] = useState("top");
   const [loginOpen, setLoginOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
@@ -83,7 +86,14 @@ export default function HomePage({ streamerName }) {
                 </Button>
               ) : (
                 <Button
-                  onClick={() => setLoginOpen(true)}
+                  onClick={() => {
+                    if (user) {
+                      // Already logged in — open the Telegram link gate, not the login dialog
+                      window.dispatchEvent(new Event("svj:open-telegram-gate"));
+                    } else {
+                      setLoginOpen(true);
+                    }
+                  }}
                   className="h-12 px-7 bg-[#53FC18] text-black font-bold text-sm rounded-2xl hover:bg-[#3ECA0D] hover:shadow-[0_0_40px_rgba(83,252,24,0.5)] hover:-translate-y-0.5 transition-all"
                   data-testid="hero-login-btn"
                 >
@@ -188,7 +198,17 @@ export default function HomePage({ streamerName }) {
                 İlk Klibi Gönder
               </Button>
             ) : (
-              <Button onClick={() => setLoginOpen(true)} className="bg-[#53FC18] text-black font-bold rounded-xl" data-testid="empty-login-btn">
+              <Button
+                onClick={() => {
+                  if (user) {
+                    window.dispatchEvent(new Event("svj:open-telegram-gate"));
+                  } else {
+                    setLoginOpen(true);
+                  }
+                }}
+                className="bg-[#53FC18] text-black font-bold rounded-xl"
+                data-testid="empty-login-btn"
+              >
                 {user ? "Telegram Bağla" : "Göndermek için Giriş Yap"}
               </Button>
             )}
