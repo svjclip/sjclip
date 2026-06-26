@@ -123,7 +123,7 @@ export default function TelegramLinkDialog({ open, onOpenChange, allowSkip = tru
                 <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-[#53FC18] mb-1">Arenada</div>
                 <div className="font-display font-black text-lg leading-tight">
                   Telegram'ı bağlayan{" "}
-                  <span className="text-[#53FC18] text-2xl">#{stats.telegram_linked + 1}</span>'inci<br />
+                  <span className="text-[#53FC18] text-2xl">#{stats.next_position}</span>'inci<br />
                   kişi sen ol.
                 </div>
                 <div className="text-[11px] text-zinc-500 mt-1">

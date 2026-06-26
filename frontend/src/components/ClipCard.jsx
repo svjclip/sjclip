@@ -183,55 +183,58 @@ export default function ClipCard({ clip, rank }) {
             <span data-testid={`clip-submitter-${clip.id}`}>{clip.submitter_username}</span>
           </Link>
 
-          <div className="flex items-center gap-2">
-            {user && user.username !== clip.submitter_username && (
-              <button
-                type="button"
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setReportOpen(true); }}
-                className="text-zinc-600 hover:text-[#FFD166] transition-colors p-1.5"
-                aria-label="Klibi raporla"
-                data-testid={`report-clip-btn-${clip.id}`}
-              >
-                <Flag className="w-3.5 h-3.5" />
-              </button>
-            )}
-            <motion.button
-              onClick={toggleVote}
-              disabled={busy}
-              whileTap={{ scale: 0.88 }}
-              whileHover={{ y: -2 }}
-              animate={voted ? { boxShadow: ["0 0 0 rgba(83,252,24,0.4)","0 0 28px rgba(83,252,24,0.6)","0 0 0 rgba(83,252,24,0.4)"] } : {}}
-              transition={{ duration: 1.8, repeat: voted ? Infinity : 0, ease: "easeInOut" }}
-              className={`relative overflow-hidden flex items-center gap-1.5 pl-2.5 pr-3.5 py-1.5 rounded-full font-mono text-sm font-bold transition-colors ${
-                voted
-                  ? "bg-gradient-to-r from-[#53FC18] to-[#42cc13] text-black border border-[#53FC18]"
-                  : "bg-white/5 text-white border border-white/10 hover:border-[#53FC18]/50 hover:bg-[#53FC18]/10"
-              } disabled:opacity-50`}
-              data-testid={`upvote-btn-${clip.id}`}
-              aria-pressed={voted}
+          {user && user.username !== clip.submitter_username && (
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setReportOpen(true); }}
+              className="text-zinc-600 hover:text-[#FFD166] transition-colors p-1.5"
+              aria-label="Klibi raporla"
+              data-testid={`report-clip-btn-${clip.id}`}
             >
-              <motion.span
-                key={voted ? "v" : "u"}
-                initial={{ rotate: voted ? -180 : 0, scale: 0.5 }}
-                animate={{ rotate: 0, scale: 1 }}
-                transition={{ type: "spring", stiffness: 400, damping: 14 }}
-                className="inline-flex"
-              >
-                {voted ? <Check className="w-4 h-4" strokeWidth={3} /> : <ChevronUp className="w-4 h-4" />}
-              </motion.span>
-              <motion.span
-                key={`count-${votes}`}
-                initial={{ y: -8, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.2 }}
-                data-testid={`vote-count-${clip.id}`}
-              >
-                {votes}
-              </motion.span>
-            </motion.button>
-          </div>
+              <Flag className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Full-width vote bar — dominant call-to-action */}
+      <motion.button
+        onClick={toggleVote}
+        disabled={busy}
+        whileTap={{ scale: 0.985 }}
+        whileHover={!voted ? { backgroundColor: "rgba(83,252,24,0.12)" } : {}}
+        animate={voted ? { boxShadow: ["inset 0 0 0 rgba(83,252,24,0)","inset 0 0 24px rgba(0,0,0,0.25)","inset 0 0 0 rgba(83,252,24,0)"] } : {}}
+        transition={{ duration: 2.4, repeat: voted ? Infinity : 0, ease: "easeInOut" }}
+        className={`relative w-full overflow-hidden border-t font-display font-black uppercase tracking-[0.18em] text-sm h-14 flex items-center justify-center gap-2.5 transition-colors disabled:opacity-60 ${
+          voted
+            ? "bg-gradient-to-r from-[#53FC18] via-[#5cff1f] to-[#42cc13] text-black border-[#53FC18] shadow-[0_0_30px_rgba(83,252,24,0.35)]"
+            : "bg-black/40 text-white border-white/10 hover:border-[#53FC18]/50 hover:text-[#53FC18]"
+        }`}
+        data-testid={`upvote-btn-${clip.id}`}
+        aria-pressed={voted}
+      >
+        <motion.span
+          key={voted ? "v" : "u"}
+          initial={{ rotate: voted ? -90 : 0, scale: 0.4 }}
+          animate={{ rotate: 0, scale: 1 }}
+          transition={{ type: "spring", stiffness: 380, damping: 14 }}
+          className="inline-flex"
+        >
+          {voted ? <Check className="w-5 h-5" strokeWidth={3.5} /> : <ChevronUp className="w-5 h-5" />}
+        </motion.span>
+        <span>{voted ? "Oyladın" : "Oy Ver"}</span>
+        <span className="opacity-50">·</span>
+        <motion.span
+          key={`count-${votes}`}
+          initial={{ y: -10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.25 }}
+          className="font-mono text-base tabular-nums"
+          data-testid={`vote-count-${clip.id}`}
+        >
+          {votes}
+        </motion.span>
+      </motion.button>
     </motion.div>
     <ChannelGateDialog open={gateOpen} onOpenChange={setGateOpen} missingChannels={missing} onRecheck={recheckGate} busy={busy} />
     <ReportClipDialog open={reportOpen} onOpenChange={setReportOpen} clipId={clip.id} clipTitle={clip.title} />

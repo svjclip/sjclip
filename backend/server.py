@@ -41,8 +41,10 @@ USERNAME_REGEX = re.compile(r"^[A-Za-z0-9_]{3,30}$")
 PHONE_REGEX = re.compile(r"^\+?[0-9\s\-()]{7,20}$")
 # Only clips from this Kick streamer are accepted — bypasses moderation
 ALLOWED_KICK_STREAMER = os.environ.get('ALLOWED_KICK_STREAMER', 'slotjack').lower()
-# Community counter cosmetic offset (so the public never sees the real number)
-COMMUNITY_DISPLAY_OFFSET = int(os.environ.get('COMMUNITY_DISPLAY_OFFSET', '1247'))
+# Public community counter: shown = real * multiplier (no static offset).
+# So every real signup adds COMMUNITY_DISPLAY_MULTIPLIER to the visible counter
+# in a stable, deterministic way (1 real → 4 shown, 2 real → 8 shown, ...).
+COMMUNITY_DISPLAY_MULTIPLIER = int(os.environ.get('COMMUNITY_DISPLAY_MULTIPLIER', '4'))
 
 app = FastAPI(title=f"{STREAMER_NAME} Clip Voting API")
 api_router = APIRouter(prefix="/api")
@@ -985,18 +987,17 @@ async def weekly_leaderboard(user: Optional[User] = Depends(get_current_user)):
 @api_router.get("/stats/community")
 async def community_stats():
     """Public counter for landing/onboarding gamification.
-    Real counts are NOT exposed — the response contains cosmetic "displayed" values
-    inflated by COMMUNITY_DISPLAY_OFFSET so the public never sees the exact backend count.
+    Real DB counts are NEVER exposed. Public sees only `real * MULTIPLIER`.
+    Example with MULTIPLIER=4: real_telegram=1 → displayed=4 → next_position=8.
     """
     real_total = await db.users.count_documents({})
     real_telegram = await db.users.count_documents({"telegram_id": {"$type": "string"}})
-    # Stable inflation: each real user adds ~3 visible members for the public counter
-    displayed_total = real_total * 3 + COMMUNITY_DISPLAY_OFFSET
-    displayed_telegram = real_telegram * 3 + COMMUNITY_DISPLAY_OFFSET
+    displayed_total = real_total * COMMUNITY_DISPLAY_MULTIPLIER
+    displayed_telegram = real_telegram * COMMUNITY_DISPLAY_MULTIPLIER
     return {
         "total_members": displayed_total,
         "telegram_linked": displayed_telegram,
-        "next_position": displayed_telegram + 1,
+        "next_position": displayed_telegram + COMMUNITY_DISPLAY_MULTIPLIER,
     }
 
 
