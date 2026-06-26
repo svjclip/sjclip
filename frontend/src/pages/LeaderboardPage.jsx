@@ -12,6 +12,14 @@ export default function LeaderboardPage() {
     queryFn: async () => (await api.get("/leaderboard/weekly")).data,
   });
 
+  const { data: config } = useQuery({
+    queryKey: ["config-prize"],
+    queryFn: async () => (await api.get("/config")).data,
+    staleTime: 60_000,
+  });
+  const prizeAmount = (config?.prize_amount || "").trim();
+  const prizeDescription = (config?.prize_description || "").trim();
+
   const winner = clips[0];
   const rest = clips.slice(1);
 
@@ -37,8 +45,20 @@ export default function LeaderboardPage() {
           <div className="flex items-center gap-3">
             <Trophy className="w-6 h-6 text-[#53FC18]" />
             <div>
-              <div className="font-display font-bold text-lg">Ödül düşüyor</div>
-              <div className="text-xs text-zinc-500 font-mono uppercase tracking-wider">Pazar 00:00 UTC</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-display font-bold text-lg">Ödül düşüyor</span>
+                {prizeAmount && (
+                  <span
+                    className="inline-flex items-center px-2.5 py-1 bg-[#53FC18] text-black text-xs font-black uppercase tracking-wider"
+                    data-testid="leaderboard-prize-amount"
+                  >
+                    {prizeAmount}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-zinc-500 font-mono uppercase tracking-wider mt-0.5">
+                {prizeDescription || "Pazar 00:00 UTC"}
+              </div>
             </div>
           </div>
           <CountdownTimer />
