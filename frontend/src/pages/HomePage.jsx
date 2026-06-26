@@ -40,8 +40,8 @@ export default function HomePage({ streamerName }) {
 
   return (
     <div className="relative">
-      {/* HERO */}
-      <section ref={heroRef} className="relative min-h-[100vh] flex items-center overflow-hidden" data-testid="hero-section">
+      {/* HERO — compact, leaves room for clips above-the-fold */}
+      <section ref={heroRef} className="relative min-h-[78vh] flex items-center overflow-hidden" data-testid="hero-section">
         <motion.div style={{ y: heroBgY }} className="absolute inset-0">
           <Hero3D />
         </motion.div>
@@ -52,7 +52,7 @@ export default function HomePage({ streamerName }) {
 
         <motion.div
           style={{ scale: heroScale, opacity: heroOpacity, y: heroY }}
-          className="relative z-20 max-w-7xl mx-auto px-6 lg:px-8 w-full pt-24 pb-12"
+          className="relative z-20 max-w-7xl mx-auto px-6 lg:px-8 w-full pt-24 pb-10"
         >
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -60,38 +60,36 @@ export default function HomePage({ streamerName }) {
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-4xl"
           >
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass mb-8" data-testid="hero-badge">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass mb-6" data-testid="hero-badge">
               <span className="w-1.5 h-1.5 rounded-full bg-[#53FC18] animate-pulse" />
               <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#53FC18]">Hafta Aktif</span>
             </div>
-            <h1 className="font-display font-black text-5xl sm:text-7xl lg:text-8xl xl:text-[9rem] tracking-tighter leading-[0.88]" data-testid="hero-title">
-              Bu haftayı<br />
-              <span className="text-[#53FC18] neon-text">kıran</span><br />
-              klibi seç.
+            <h1 className="font-display font-black text-5xl sm:text-6xl lg:text-7xl xl:text-8xl tracking-tighter leading-[0.88]" data-testid="hero-title">
+              Bu haftayı <span className="text-[#53FC18] neon-text">kıran</span> klibi seç.
             </h1>
-            <p className="mt-8 text-lg sm:text-xl text-zinc-400 max-w-xl leading-relaxed" data-testid="hero-subtitle">
+            <p className="mt-6 text-base sm:text-lg text-zinc-400 max-w-xl leading-relaxed" data-testid="hero-subtitle">
               {streamerName}'in en iyi Kick kliplerini gönder. Topluluk oy versin. Haftanın en iyisi ödülü kapsın.
             </p>
 
-            <div className="mt-12 flex flex-wrap items-center gap-4">
+            <div className="mt-8 flex flex-wrap items-center gap-3">
               {fullyOnboarded ? (
                 <Button
                   onClick={() => setSubmitOpen(true)}
-                  className="h-14 px-8 bg-[#53FC18] text-black font-bold text-base rounded-2xl hover:bg-[#3ECA0D] hover:shadow-[0_0_40px_rgba(83,252,24,0.5)] hover:-translate-y-0.5 transition-all"
+                  className="h-12 px-7 bg-[#53FC18] text-black font-bold text-sm rounded-2xl hover:bg-[#3ECA0D] hover:shadow-[0_0_40px_rgba(83,252,24,0.5)] hover:-translate-y-0.5 transition-all"
                   data-testid="hero-submit-btn"
                 >
-                  <Sparkles className="w-5 h-5 mr-2" /> Klip Gönder
+                  <Sparkles className="w-4 h-4 mr-2" /> Klip Gönder
                 </Button>
               ) : (
                 <Button
                   onClick={() => setLoginOpen(true)}
-                  className="h-14 px-8 bg-[#53FC18] text-black font-bold text-base rounded-2xl hover:bg-[#3ECA0D] hover:shadow-[0_0_40px_rgba(83,252,24,0.5)] hover:-translate-y-0.5 transition-all"
+                  className="h-12 px-7 bg-[#53FC18] text-black font-bold text-sm rounded-2xl hover:bg-[#3ECA0D] hover:shadow-[0_0_40px_rgba(83,252,24,0.5)] hover:-translate-y-0.5 transition-all"
                   data-testid="hero-login-btn"
                 >
-                  {user ? "Telegram Bağla" : "Arenaya Gir"} <ArrowRight className="w-5 h-5 ml-2" />
+                  {user ? "Telegram Bağla" : "Arenaya Gir"} <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               )}
-              <a href="#feed" className="h-14 px-8 inline-flex items-center font-bold text-base rounded-2xl border border-white/10 hover:border-white/30 hover:bg-white/5 transition-all" data-testid="hero-feed-btn">
+              <a href="#feed" className="h-12 px-7 inline-flex items-center font-bold text-sm rounded-2xl border border-white/10 hover:border-white/30 hover:bg-white/5 transition-all" data-testid="hero-feed-btn">
                 Klipleri Gör
               </a>
             </div>
@@ -101,35 +99,29 @@ export default function HomePage({ streamerName }) {
         {/* Scroll hint */}
         <motion.div
           style={{ opacity: heroOpacity }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 text-zinc-500"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 text-zinc-500"
           data-testid="scroll-hint"
         >
-          <span className="text-[10px] font-mono uppercase tracking-[0.3em]">Kaydır</span>
+          <span className="text-[10px] font-mono uppercase tracking-[0.3em]">Klipler</span>
           <motion.div animate={{ y: [0, 6, 0] }} transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}>
             <ArrowDown className="w-4 h-4" />
           </motion.div>
         </motion.div>
       </section>
 
-      {/* HOW IT WORKS — scroll-driven */}
-      <HowItWorks />
-
-      {/* PRIZE REVEAL — pinned/scale on scroll */}
-      <PrizeReveal />
-
-      {/* TOP 3 */}
+      {/* TOP 3 — directly under hero so clips show above-the-fold on most screens */}
       {topThree.length > 0 && (
-        <section className="relative max-w-7xl mx-auto px-6 lg:px-8 py-24" data-testid="top-three-section">
+        <section className="relative max-w-7xl mx-auto px-6 lg:px-8 pt-12 pb-10" data-testid="top-three-section">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.7 }}
-            className="flex items-end justify-between mb-12"
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.5 }}
+            className="flex items-end justify-between mb-8"
           >
             <div>
-              <div className="text-xs font-bold uppercase tracking-[0.2em] text-[#53FC18] mb-3">Bu Hafta</div>
-              <h2 className="font-display font-black text-4xl lg:text-6xl tracking-tighter">Zirvedekiler.</h2>
+              <div className="text-xs font-bold uppercase tracking-[0.2em] text-[#53FC18] mb-2">Bu Hafta</div>
+              <h2 className="font-display font-black text-3xl lg:text-5xl tracking-tighter">Zirvedekiler.</h2>
             </div>
             <a href="/leaderboard" className="hidden md:inline-flex items-center gap-1 text-sm text-zinc-400 hover:text-white">
               Tam sıralama <ArrowRight className="w-4 h-4" />
@@ -143,18 +135,18 @@ export default function HomePage({ streamerName }) {
         </section>
       )}
 
-      {/* FEED */}
-      <section id="feed" className="relative max-w-7xl mx-auto px-6 lg:px-8 py-24" data-testid="feed-section">
+      {/* FEED — main clip list */}
+      <section id="feed" className="relative max-w-7xl mx-auto px-6 lg:px-8 pt-8 pb-20" data-testid="feed-section">
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-100px" }}
-          transition={{ duration: 0.7 }}
-          className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 mb-12"
+          viewport={{ once: true, margin: "-50px" }}
+          transition={{ duration: 0.5 }}
+          className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 mb-8"
         >
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.2em] text-[#53FC18] mb-3">Tüm Klipler</div>
-            <h2 className="font-display font-black text-4xl lg:text-6xl tracking-tighter">Tüm akış.</h2>
+            <div className="text-xs font-bold uppercase tracking-[0.2em] text-[#53FC18] mb-2">Tüm Klipler</div>
+            <h2 className="font-display font-black text-3xl lg:text-5xl tracking-tighter">Tüm akış.</h2>
           </div>
           <div className="flex gap-2 p-1 rounded-xl bg-white/5 border border-white/10" data-testid="sort-tabs">
             <button
@@ -207,6 +199,12 @@ export default function HomePage({ streamerName }) {
           </div>
         )}
       </section>
+
+      {/* HOW IT WORKS — moved BELOW clips (was previously between hero and feed and caused excessive scroll) */}
+      <HowItWorks />
+
+      {/* PRIZE REVEAL — also moved below */}
+      <PrizeReveal />
 
       <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
       <SubmitClipDialog open={submitOpen} onOpenChange={setSubmitOpen} />
