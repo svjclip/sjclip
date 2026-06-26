@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { api } from "./lib/api";
@@ -11,9 +11,38 @@ import LeaderboardPage from "./pages/LeaderboardPage";
 import ClipDetailPage from "./pages/ClipDetailPage";
 import ProfilePage from "./pages/ProfilePage";
 import AdminPage from "./pages/AdminPage";
+import AdminLoginPage from "./pages/AdminLoginPage";
 import TimelinePage from "./pages/TimelinePage";
 import SetPasswordDialog from "./components/SetPasswordDialog";
 import TelegramLinkDialog from "./components/TelegramLinkDialog";
+
+// Routes that should NOT show the public navbar/footer/global gates — admin
+// console pages have their own visual chrome and shouldn't be cluttered by
+// user-facing UI fragments.
+const ADMIN_CHROME_PATHS = ["/yonetim/giris"];
+
+function PublicChrome({ streamerName }) {
+  const location = useLocation();
+  if (ADMIN_CHROME_PATHS.includes(location.pathname)) return null;
+  return <Navbar streamerName={streamerName} />;
+}
+
+function PublicFooter({ streamerName }) {
+  const location = useLocation();
+  if (ADMIN_CHROME_PATHS.includes(location.pathname)) return null;
+  return <Footer streamerName={streamerName} />;
+}
+
+function GatesWrapper() {
+  const location = useLocation();
+  if (ADMIN_CHROME_PATHS.includes(location.pathname)) return null;
+  return (
+    <>
+      <GlobalSetPasswordGate />
+      <GlobalTelegramGate />
+    </>
+  );
+}
 
 function GlobalSetPasswordGate() {
   const { user, needsPasswordSetup } = useAuth();
@@ -80,7 +109,7 @@ function AppShell() {
   return (
     <div className="App relative min-h-screen bg-[#050505] text-white">
       <BrowserRouter>
-        <Navbar streamerName={streamerName} />
+        <PublicChrome streamerName={streamerName} />
         <main className="relative z-10">
           <Routes>
             <Route path="/" element={<HomePage streamerName={streamerName} />} />
@@ -88,13 +117,13 @@ function AppShell() {
             <Route path="/clip/:id" element={<ClipDetailPage />} />
             <Route path="/profil/:username" element={<ProfilePage />} />
             <Route path="/akis-zaman" element={<TimelinePage />} />
+            <Route path="/yonetim/giris" element={<AdminLoginPage />} />
             <Route path="/admin" element={<AdminPage />} />
           </Routes>
         </main>
-        <Footer streamerName={streamerName} />
+        <PublicFooter streamerName={streamerName} />
+        <GatesWrapper />
       </BrowserRouter>
-      <GlobalSetPasswordGate />
-      <GlobalTelegramGate />
       <Toaster
         theme="dark"
         position="bottom-right"

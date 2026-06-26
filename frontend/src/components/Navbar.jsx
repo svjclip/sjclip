@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Trophy, Plus, Zap, LogOut, Send, Link2, ShieldCheck, Activity } from "lucide-react";
+import { Trophy, Plus, Zap, LogOut, Send, Link2, Activity, Menu, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { Button } from "./ui/button";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "./ui/sheet";
 import LoginDialog from "./LoginDialog";
 import SubmitClipDialog from "./SubmitClipDialog";
 import AvatarPicker from "./AvatarPicker";
@@ -13,6 +14,7 @@ export default function Navbar({ streamerName }) {
   const [loginOpen, setLoginOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   // Fully onboarded = logged in + Telegram linked + all required channels joined
   const fullyOnboarded = !!user && !!user.telegram_id && (missingChannels || []).length === 0;
@@ -21,6 +23,15 @@ export default function Navbar({ streamerName }) {
     `font-display text-sm tracking-wider uppercase transition-colors ${
       isActive ? "text-[#53FC18]" : "text-zinc-400 hover:text-white"
     }`;
+
+  const mobileLinkClass = ({ isActive }) =>
+    `flex items-center gap-3 px-4 py-3 font-display tracking-wider uppercase border-l-2 transition-colors ${
+      isActive
+        ? "border-[#53FC18] text-[#53FC18] bg-[#53FC18]/5"
+        : "border-transparent text-zinc-300 hover:text-white hover:border-white/30"
+    }`;
+
+  const closeMobile = () => setMobileOpen(false);
 
   return (
     <>
@@ -31,12 +42,84 @@ export default function Navbar({ streamerName }) {
         className="fixed top-0 inset-x-0 z-50 glass border-b border-white/5"
         data-testid="main-navbar"
       >
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+          {/* Mobile hamburger (left side) */}
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+            <SheetTrigger asChild>
+              <button
+                type="button"
+                className="md:hidden p-2 -ml-2 text-zinc-300 hover:text-[#53FC18] transition-colors"
+                aria-label="Menüyü aç"
+                data-testid="mobile-menu-toggle"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+            </SheetTrigger>
+            <SheetContent
+              side="left"
+              className="bg-black border-r border-[#53FC18]/20 text-white w-72 p-0 [&>button]:hidden"
+              data-testid="mobile-nav-sheet"
+            >
+              <SheetTitle className="sr-only">Mobil Menü</SheetTitle>
+              <div className="flex items-center justify-between p-5 border-b border-white/10">
+                <Link to="/" onClick={closeMobile} className="flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-[#53FC18] drop-shadow-[0_0_8px_rgba(83,252,24,0.8)]" strokeWidth={2.5} />
+                  <span className="font-display font-black text-base tracking-tighter">
+                    {streamerName}<span className="text-[#53FC18]">.</span>CLIPS
+                  </span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={closeMobile}
+                  className="text-zinc-400 hover:text-white p-1"
+                  aria-label="Kapat"
+                  data-testid="mobile-menu-close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <nav className="py-2">
+                <NavLink to="/" end onClick={closeMobile} className={mobileLinkClass} data-testid="mobile-nav-feed">
+                  Klipler
+                </NavLink>
+                <NavLink to="/leaderboard" onClick={closeMobile} className={mobileLinkClass} data-testid="mobile-nav-leaderboard">
+                  <Trophy className="w-4 h-4" />
+                  Sıralama
+                </NavLink>
+                <NavLink to="/akis-zaman" onClick={closeMobile} className={mobileLinkClass} data-testid="mobile-nav-timeline">
+                  <Activity className="w-4 h-4" />
+                  Akış
+                </NavLink>
+                {user && (
+                  <NavLink to={`/profil/${user.username}`} onClick={closeMobile} className={mobileLinkClass}>
+                    <span className="w-4 h-4 rounded-full bg-[#53FC18]/20 inline-flex items-center justify-center text-[10px] text-[#53FC18] font-bold">
+                      {user.username[0].toUpperCase()}
+                    </span>
+                    Profilim
+                  </NavLink>
+                )}
+              </nav>
+              {user && (
+                <div className="p-4 mt-2 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => { closeMobile(); logout(); }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-zinc-400 hover:text-white border border-white/10 hover:border-white/30 rounded-md transition-colors"
+                    data-testid="mobile-logout-btn"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Çıkış Yap
+                  </button>
+                </div>
+              )}
+            </SheetContent>
+          </Sheet>
+
           <Link to="/" className="flex items-center gap-2 group" data-testid="nav-logo">
-            <div className="relative">
+            <div className="relative hidden sm:block">
               <Zap className="w-6 h-6 text-[#53FC18] drop-shadow-[0_0_8px_rgba(83,252,24,0.8)]" strokeWidth={2.5} />
             </div>
-            <span className="font-display font-black text-lg tracking-tighter">
+            <span className="font-display font-black text-base sm:text-lg tracking-tighter">
               {streamerName}<span className="text-[#53FC18]">.</span>CLIPS
             </span>
           </Link>
@@ -49,11 +132,6 @@ export default function Navbar({ streamerName }) {
             <NavLink to="/akis-zaman" className={linkClass} data-testid="nav-timeline">
               <span className="inline-flex items-center gap-1.5"><Activity className="w-4 h-4" />Akış</span>
             </NavLink>
-            {user?.is_admin && (
-              <NavLink to="/admin" className={linkClass} data-testid="nav-admin">
-                <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" />Admin</span>
-              </NavLink>
-            )}
           </div>
 
           <div className="flex items-center gap-3">

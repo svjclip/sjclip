@@ -48,13 +48,11 @@ export default function AdminPage() {
     return <div className="pt-32 pb-20 max-w-6xl mx-auto px-6 lg:px-8 text-zinc-500" data-testid="admin-loading">Yükleniyor...</div>;
   }
   if (!user || !user.is_admin) {
-    return (
-      <div className="pt-32 pb-20 max-w-3xl mx-auto px-6 lg:px-8 text-center" data-testid="admin-forbidden">
-        <ShieldCheck className="w-10 h-10 text-zinc-700 mx-auto mb-4" />
-        <h1 className="font-display font-black text-3xl mb-2">Yetkin yok</h1>
-        <p className="text-zinc-500">Bu sayfa sadece yöneticiler içindir.</p>
-      </div>
-    );
+    if (typeof window !== "undefined") {
+      // Send unauthenticated visitors / non-admins to the dedicated admin login.
+      window.location.replace("/yonetim/giris");
+    }
+    return <div className="pt-32 pb-20 text-center text-zinc-500" data-testid="admin-redirecting">Yönlendiriliyor...</div>;
   }
 
   const handleResolve = async (reportId, action) => {
