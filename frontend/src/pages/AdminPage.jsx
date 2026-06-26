@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import PrizeSettings from "../components/PrizeSettings";
 import ContestManager from "../components/ContestManager";
+import BroadcastForm from "../components/BroadcastForm";
 import AdminUserList from "../components/AdminUserList";
 
 function StatTile({ icon: Icon, label, value, accent, testid }) {
@@ -101,6 +102,9 @@ export default function AdminPage() {
 
       {/* CONTEST MANAGER */}
       <ContestManager />
+
+      {/* BROADCAST */}
+      <BroadcastForm />
 
       {/* USER LIST */}
       <AdminUserList />

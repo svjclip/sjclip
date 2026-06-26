@@ -73,10 +73,12 @@ class User(BaseModel):
     username: str
     avatar_url: Optional[str] = None
     telegram_id: Optional[str] = None
+    telegram_username: Optional[str] = None
     telegram_photo_file_id: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     has_password: bool = False
+    onboarded_at: Optional[str] = None  # set the first time telegram + channels are completed
     created_at: str = Field(default_factory=now_iso)
 
 
@@ -86,9 +88,11 @@ class UserPublic(BaseModel):
     username: str
     avatar_url: Optional[str] = None
     telegram_id: Optional[str] = None
+    telegram_username: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     has_password: bool = False
+    has_completed_onboarding: bool = False
     created_at: str
 
 
@@ -339,6 +343,7 @@ def user_to_public(doc: dict) -> dict:
     """Strip password_hash and serialise as plain dict (public-safe)."""
     pub = {k: v for k, v in doc.items() if k not in ("password_hash", "_id")}
     pub.setdefault("has_password", bool(doc.get("password_hash")))
+    pub["has_completed_onboarding"] = bool(doc.get("onboarded_at"))
     return pub
 
 
@@ -818,11 +823,41 @@ async def verify_code(req: VerifyCodeRequest, response: Response, current: Optio
     }
 
 
+async def refresh_telegram_username(telegram_id: str) -> Optional[str]:
+    """Fetch current Telegram public username via bot.getChat. Returns None if
+    user has no public @ handle or if the API fails."""
+    if not TELEGRAM_BOT_TOKEN or not telegram_id:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getChat",
+                params={"chat_id": telegram_id},
+            )
+            data = r.json()
+            if data.get("ok"):
+                return data["result"].get("username") or None
+    except Exception as e:
+        logger.warning(f"getChat failed for {telegram_id}: {e}")
+    return None
+
+
 @api_router.get("/auth/check-channels")
 async def check_channels(user: User = Depends(require_user)):
     if not user.telegram_id:
         return {"missing_channels": REQUIRED_CHANNELS, "telegram_linked": False}
     missing = await check_channel_membership(int(user.telegram_id))
+    update: Dict[str, Any] = {}
+    if not missing and not user.onboarded_at:
+        # First time the user has both telegram + all channels — mark onboarded.
+        update["onboarded_at"] = now_iso()
+    # Opportunistically refresh telegram_username if missing or stale
+    if not user.telegram_username:
+        fresh = await refresh_telegram_username(user.telegram_id)
+        if fresh:
+            update["telegram_username"] = fresh
+    if update:
+        await db.users.update_one({"id": user.id}, {"$set": update})
     return {"missing_channels": missing, "telegram_linked": True}
 
 
@@ -1359,6 +1394,42 @@ async def admin_set_winner(contest_id: str, payload: WinnerRequest, admin: User 
     return {"ok": True, "winner_clip_id": payload.clip_id, "winner_announced_at": announced_at}
 
 
+class BroadcastRequest(BaseModel):
+    title: str
+    message: str
+    link: Optional[str] = None
+
+
+@api_router.post("/admin/notifications/broadcast")
+async def admin_broadcast_notification(payload: BroadcastRequest, admin: User = Depends(require_admin)):
+    """Send a custom notification to every registered user."""
+    title = payload.title.strip()
+    message = payload.message.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Başlık boş olamaz")
+    if not message:
+        raise HTTPException(status_code=400, detail="Mesaj boş olamaz")
+    if len(title) > 120:
+        raise HTTPException(status_code=400, detail="Başlık 120 karakteri geçemez")
+    if len(message) > 500:
+        raise HTTPException(status_code=400, detail="Mesaj 500 karakteri geçemez")
+    user_ids = [u["id"] async for u in db.users.find({}, {"_id": 0, "id": 1})]
+    if not user_ids:
+        return {"ok": True, "sent": 0}
+    notifs = [
+        Notification(
+            user_id=uid,
+            type="admin_broadcast",
+            title=title,
+            message=message,
+            link=payload.link or None,
+        ).model_dump()
+        for uid in user_ids
+    ]
+    await db.notifications.insert_many(notifs)
+    return {"ok": True, "sent": len(notifs)}
+
+
 # ----------------- Notifications -----------------
 @api_router.get("/notifications/me")
 async def my_notifications(unread_only: bool = False, user: User = Depends(require_user)):
@@ -1655,6 +1726,16 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin)):
     u = await db.users.find_one({"id": user_id}, {"_id": 0, "hashed_password": 0})
     if not u:
         raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    # Opportunistically refresh telegram_username from Telegram's getChat API.
+    # The user may have set a @username after linking, so our stored value can
+    # become stale.
+    if u.get("telegram_id"):
+        fresh = await refresh_telegram_username(u["telegram_id"])
+        if fresh and fresh != u.get("telegram_username"):
+            await db.users.update_one(
+                {"id": user_id}, {"$set": {"telegram_username": fresh}}
+            )
+            u["telegram_username"] = fresh
     clips_count = await db.clips.count_documents({"submitter_id": user_id})
     votes_count = await db.votes.count_documents({"user_id": user_id})
     reports_against = await db.reports.count_documents({"clip_submitter_id": user_id})

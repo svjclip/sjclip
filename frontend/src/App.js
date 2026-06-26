@@ -53,19 +53,23 @@ function GlobalSetPasswordGate() {
 
 function GlobalTelegramGate() {
   const { user, missingChannels, needsPasswordSetup, loading } = useAuth();
+  // For users who have NEVER completed onboarding (telegram + channel join),
+  // the dialog is non-dismissable — they must complete the flow to use the
+  // site. For returning users who once completed it but later lost a channel
+  // membership, the dialog is dismissable via the session-storage flag below.
+  const isFirstTimeFlow = !!user && !user.has_completed_onboarding;
   const dismissKey = user ? `svj:tg-gate-dismissed:${user.id}` : null;
   const [dismissed, setDismissed] = useState(() => {
-    if (typeof window === "undefined" || !dismissKey) return false;
+    if (typeof window === "undefined" || !dismissKey || isFirstTimeFlow) return false;
     return window.sessionStorage.getItem(dismissKey) === "1";
   });
 
-  // Kullanıcı veya gating durumu değiştiğinde sessionStorage'dan yeniden oku
   useEffect(() => {
+    if (isFirstTimeFlow) { setDismissed(false); return; }
     if (!dismissKey) { setDismissed(false); return; }
     setDismissed(window.sessionStorage.getItem(dismissKey) === "1");
-  }, [dismissKey, user?.telegram_id, (missingChannels || []).length]);
+  }, [dismissKey, user?.telegram_id, (missingChannels || []).length, isFirstTimeFlow]);
 
-  // Kullanıcı dilerse navbar'dan tekrar açabilsin
   useEffect(() => {
     const open = () => {
       if (dismissKey) window.sessionStorage.removeItem(dismissKey);
@@ -75,9 +79,7 @@ function GlobalTelegramGate() {
     return () => window.removeEventListener("svj:open-telegram-gate", open);
   }, [dismissKey]);
 
-  // Don't fight with set-password modal (it must run first)
   if (loading || !user || needsPasswordSetup) return null;
-  // Admins are moderators, not voters — they bypass the Telegram requirement.
   if (user.is_admin) return null;
   const needsTelegram = !user.telegram_id;
   const needsChannels = (missingChannels || []).length > 0;
@@ -87,11 +89,13 @@ function GlobalTelegramGate() {
       open={show}
       onOpenChange={(v) => {
         if (!v) {
+          // First-time users cannot dismiss — refuse the close.
+          if (isFirstTimeFlow) return;
           if (dismissKey) window.sessionStorage.setItem(dismissKey, "1");
           setDismissed(true);
         }
       }}
-      allowSkip={true}
+      allowSkip={!isFirstTimeFlow}
     />
   );
 }
