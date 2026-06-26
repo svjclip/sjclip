@@ -1,5 +1,5 @@
 import React from "react";
-import { Zap, Send } from "lucide-react";
+import { Zap } from "lucide-react";
 
 export default function Footer({ streamerName }) {
   return (
@@ -13,10 +13,6 @@ export default function Footer({ streamerName }) {
         </div>
         <div className="text-xs text-zinc-500 font-mono">
           Topluluk için yapıldı. Haftalık kazananlar. Bot yok, saçmalık yok.
-        </div>
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <Send className="w-3.5 h-3.5" />
-          <span>Telegram doğrulaması • Faz 2</span>
         </div>
       </div>
     </footer>
