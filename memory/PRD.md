@@ -29,6 +29,15 @@ SVJ adlı Kick yayıncısı için topluluk klip oylama platformu. Kullanıcılar
 
 ## Implementation History
 
+### Phase 8 — Vote Bar Redesign + Counter Formula Fix (DONE — 2026-06-26)
+**User feedback:** "oy verme butonu değişmemiş", "sayı çok şişmiş", "1 kişi kayıt olunca onu 4 kişi saysın, sıradakine 8. kişi sen ol desin"
+**Changes**
+- ClipCard vote button: kart altında **tam genişlik 56px bar** (eski sağ-alt köşedeki pill kaldırıldı). "OY VER · N" / "OYLADIN · N" (büyük uppercase font-display). Spring icon swap (ChevronUp ↔ Check), count slide-in, voted'da gradient yeşil + soft inner glow infinite.
+- Community counter formülü sadeleştirildi: `displayed = real * COMMUNITY_DISPLAY_MULTIPLIER` (default 4, no offset). `next_position = telegram_linked + MULT`. real=1 → 4 görünür → sıradakine "8.kişi sen ol". Frontend `stats.next_position` doğrudan kullanılıyor (eski `+1` kalıntı kaldırıldı).
+- **Vote sayıları (clip.votes_count) DB'de gerçek — şişirme YOK.** Sadece community counter (üye sayısı) gösterimde şişirilir.
+
+**Test (iteration_8.json):** Backend 28/28 ✅, Frontend 100% ✅. Vote bar w=387px h=56px, counter backend.next_position'a tam eşit, register sonrası total_members +4 artar.
+
 ### Phase 7 — Contest Hardening + Slotjack Lock + Vote UX (DONE — 2026-06-26)
 **Backend güvenliği (yarışma için)**
 - `ALLOWED_KICK_STREAMER` env (default: `slotjack`) — `parse_kick_clip_id` sadece slotjack URL'lerini kabul ediyor (case-insensitive, `@slotjack` ve `slotjack` ikisi de). Diğer yayıncılar 400 + Türkçe mesaj.
