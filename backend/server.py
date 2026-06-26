@@ -1346,6 +1346,90 @@ async def admin_stats(admin: User = Depends(require_admin)):
     }
 
 
+@api_router.get("/admin/users")
+async def admin_list_users(
+    search: str = "",
+    sort: str = "newest",
+    page: int = 1,
+    page_size: int = 30,
+    admin: User = Depends(require_admin),
+):
+    """Paginated user list with optional search by username/email/telegram_username."""
+    page = max(1, page)
+    page_size = max(1, min(100, page_size))
+    q: Dict[str, Any] = {}
+    if search:
+        rx = {"$regex": re.escape(search), "$options": "i"}
+        q["$or"] = [
+            {"username": rx},
+            {"email": rx},
+            {"telegram_username": rx},
+            {"phone": rx},
+        ]
+    sort_field = {
+        "newest": [("created_at", -1)],
+        "oldest": [("created_at", 1)],
+        "username": [("username", 1)],
+    }.get(sort, [("created_at", -1)])
+    total = await db.users.count_documents(q)
+    cursor = db.users.find(q, {"_id": 0, "hashed_password": 0}).sort(sort_field).skip(
+        (page - 1) * page_size
+    ).limit(page_size)
+    users = await cursor.to_list(length=page_size)
+    # decorate with clip/vote counts in bulk
+    user_ids = [u["id"] for u in users]
+    clips_by_user = {}
+    votes_by_user = {}
+    if user_ids:
+        pipeline_clips = [
+            {"$match": {"submitter_id": {"$in": user_ids}}},
+            {"$group": {"_id": "$submitter_id", "n": {"$sum": 1}}},
+        ]
+        async for row in db.clips.aggregate(pipeline_clips):
+            clips_by_user[row["_id"]] = row["n"]
+        pipeline_votes = [
+            {"$match": {"user_id": {"$in": user_ids}}},
+            {"$group": {"_id": "$user_id", "n": {"$sum": 1}}},
+        ]
+        async for row in db.votes.aggregate(pipeline_votes):
+            votes_by_user[row["_id"]] = row["n"]
+    for u in users:
+        u["clips_count"] = clips_by_user.get(u["id"], 0)
+        u["votes_count"] = votes_by_user.get(u["id"], 0)
+        u["has_telegram"] = bool(u.get("telegram_id"))
+        u["is_admin"] = u.get("username", "").lower() in ADMIN_USERNAMES
+    return {"total": total, "page": page, "page_size": page_size, "items": users}
+
+
+@api_router.get("/admin/users/{user_id}")
+async def admin_get_user(user_id: str, admin: User = Depends(require_admin)):
+    """Full detail view for a single user."""
+    u = await db.users.find_one({"id": user_id}, {"_id": 0, "hashed_password": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    clips_count = await db.clips.count_documents({"submitter_id": user_id})
+    votes_count = await db.votes.count_documents({"user_id": user_id})
+    reports_against = await db.reports.count_documents({"clip_submitter_id": user_id})
+    reports_by = await db.reports.count_documents({"reporter_id": user_id})
+    # last 5 clips
+    clips = await db.clips.find(
+        {"submitter_id": user_id}, {"_id": 0}
+    ).sort([("created_at", -1)]).limit(5).to_list(length=5)
+    # last 5 events
+    events = await db.events.find(
+        {"user_id": user_id}, {"_id": 0}
+    ).sort([("created_at", -1)]).limit(10).to_list(length=10)
+    u["is_admin"] = u.get("username", "").lower() in ADMIN_USERNAMES
+    u["has_telegram"] = bool(u.get("telegram_id"))
+    u["clips_count"] = clips_count
+    u["votes_count"] = votes_count
+    u["reports_against"] = reports_against
+    u["reports_by"] = reports_by
+    u["recent_clips"] = clips
+    u["recent_events"] = events
+    return u
+
+
 @api_router.post("/admin/reports/{report_id}/resolve")
 async def admin_resolve_report(report_id: str, payload: ResolveReportRequest, admin: User = Depends(require_admin)):
     if payload.action not in ("ignore", "delete_clip"):

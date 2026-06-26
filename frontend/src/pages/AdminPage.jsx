@@ -7,6 +7,7 @@ import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import PrizeSettings from "../components/PrizeSettings";
+import AdminUserList from "../components/AdminUserList";
 
 function StatTile({ icon: Icon, label, value, accent, testid }) {
   return (
@@ -98,6 +99,9 @@ export default function AdminPage() {
 
       {/* PRIZE SETTINGS */}
       <PrizeSettings />
+
+      {/* USER LIST */}
+      <AdminUserList />
 
       {/* REPORTS */}
       <div className="flex items-end justify-between mb-4">
