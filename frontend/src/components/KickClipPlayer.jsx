@@ -3,6 +3,32 @@ import Hls from "hls.js";
 import { Play, Loader2, AlertTriangle, RotateCcw } from "lucide-react";
 import { api } from "../lib/api";
 
+// Hardcoded production fallback parsed from REACT_APP_BACKEND_URL so we always
+// have a non-empty `parent` value for the Kick iframe handshake, even under
+// SSR/jsdom or when running on bare `localhost`.
+const PROD_HOSTNAME = (() => {
+  try {
+    return new URL(process.env.REACT_APP_BACKEND_URL || "").hostname.toLowerCase() || "clips-auth-phase3.preview.emergentagent.com";
+  } catch {
+    return "clips-auth-phase3.preview.emergentagent.com";
+  }
+})();
+
+function getCleanDomain() {
+  try {
+    if (typeof window !== "undefined" && window.location && window.location.hostname) {
+      const hostname = window.location.hostname.toLowerCase().replace(/:\d+$/, "");
+      // Reject empty / localhost which Kick rejects with "misconfigured".
+      if (hostname && hostname !== "localhost" && hostname !== "127.0.0.1") {
+        return hostname;
+      }
+    }
+  } catch (e) {
+    console.error("Failed to parse hostname, using fallback domain", e);
+  }
+  return PROD_HOSTNAME;
+}
+
 /**
  * In-page Kick clip player with two strategies:
  *   1) PRIMARY: Kick's official iframe embed
@@ -25,10 +51,13 @@ export default function KickClipPlayer({ clip, autoPlay = false }) {
   const cleanClipId = clip?.kick_clip_id?.startsWith("clip_")
     ? clip.kick_clip_id
     : `clip_${clip?.kick_clip_id || ""}`;
-  // Kick's parent handshake is strict: lower-case bare hostname, no protocol, no port.
-  // Anything else (including URL-encoded chars) triggers "This embed seems to be misconfigured".
-  const rawHost = typeof window !== "undefined" ? window.location.hostname : "";
-  const cleanDomain = rawHost.toLowerCase().replace(/:\d+$/, "");
+  // Kick's parent handshake is strict: lower-case bare hostname, no protocol,
+  // no port, NOT URL-encoded. Anything else triggers
+  // "This embed seems to be misconfigured". We fall back to the production
+  // domain (derived from REACT_APP_BACKEND_URL) if window.location.hostname
+  // is empty/localhost (SSR, jsdom, dev server, etc.) so the `parent` param
+  // is never empty.
+  const cleanDomain = getCleanDomain();
   const iframeUrl = `https://player.kick.com/embed/clips/${cleanClipId}?parent=${cleanDomain}`;
 
   // If iframe doesn't load within ~5s, assume Kick blocked it and switch to HLS.
