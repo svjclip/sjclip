@@ -64,7 +64,7 @@ export default function Navbar({ streamerName }) {
                   >
                     <Plus className="w-4 h-4 mr-1" /> Klip Gönder
                   </Button>
-                ) : (
+                ) : user.is_admin ? null : (
                   <div
                     className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#FFD166]/40 bg-[#FFD166]/5 text-[11px] uppercase tracking-wider text-[#FFD166] font-bold"
                     data-testid="nav-onboarding-hint"

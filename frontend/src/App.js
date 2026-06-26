@@ -25,6 +25,8 @@ function GlobalTelegramGate() {
   const { user, missingChannels, needsPasswordSetup, loading } = useAuth();
   // Don't fight with set-password modal (it must run first)
   if (loading || !user || needsPasswordSetup) return null;
+  // Admins are moderators, not voters — they bypass the Telegram requirement.
+  if (user.is_admin) return null;
   const needsTelegram = !user.telegram_id;
   const needsChannels = (missingChannels || []).length > 0;
   const show = needsTelegram || needsChannels;

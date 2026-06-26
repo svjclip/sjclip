@@ -29,6 +29,26 @@ SVJ adlı Kick yayıncısı için topluluk klip oylama platformu. Kullanıcılar
 
 ## Implementation History
 
+### Phase 10 — Admin Panel + Klip Silme + Flame Badge + Hover Preview (DONE — 2026-06-26)
+**User isteği:** "klip silme + admin rapor inceleme paneli", "anlık oy artışı flame badge", "hover'da otomatik 3s preview"
+
+**Backend (4 yeni endpoint + helper'lar)**
+- `ADMIN_USERNAMES` env (comma-separated, default: testuser_phase3) + `is_admin()` helper + `require_admin` dependency
+- `FLAME_VOTES_THRESHOLD` env (default 3) + `compute_hot_map()` — single aggregation: votes per clip in last 1h. `attach_vote_status` artık `votes_last_hour` + `is_hot` döndürüyor
+- `DELETE /api/clips/{id}` — owner or admin; votes cascade silinir; open reports auto-resolved
+- `GET /api/admin/stats` — gerçek (şişirilmemiş) sayılar (users, telegram, clips, votes, reports)
+- `GET /api/admin/reports?status={open|resolved|all}` — clip snapshot ile birlikte
+- `POST /api/admin/reports/{id}/resolve` — action: ignore | delete_clip (delete_clip → klip+votes cascade + ilgili open reports auto-resolved)
+- `/auth/me` artık `is_admin` döndürüyor
+
+**Frontend**
+- ClipCard: turuncu gradient flame badge `hot-badge-{id}` ("+N / 1sa", pulse anim) sağ üstte; delete-clip-btn-{id} owner/admin için, iki tıklama onayı (Sil → Emin misin? → 2.5s revert); onMouseEnter 800ms timer → setPlaying(true) + iframe `?muted=true` hover preview
+- AdminPage (`/admin`): admin-page hero, 7'li admin-stats-grid (gerçek sayılar), admin-reports-list filter tabs (open/resolved/all), admin-ignore-{id} ve admin-delete-clip-{id} action butonları
+- Navbar: nav-admin link sadece is_admin=true ise görünür; nav-onboarding-hint admin için gizli
+- App.js: GlobalTelegramGate admin için bypass (admin moderatördür, voter değildir)
+
+**Test (iteration_10.json):** Backend 25/25 ✅, Frontend 100% ✅. Admin gate bypass eklenince testuser_phase3 admin paneline gerçek UI'da erişebiliyor.
+
 ### Phase 9 — Layout Compact + ClipDetail Vote Bar Unification (DONE — 2026-06-26)
 **User feedback:** "ClipDetailPage vote butonu hâlâ eski tarz" + "klipler çok aşağıda kalıyor çok fazla scroll gerekiyor"
 **Changes**
