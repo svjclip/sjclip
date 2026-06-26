@@ -11,6 +11,7 @@ import LeaderboardPage from "./pages/LeaderboardPage";
 import ClipDetailPage from "./pages/ClipDetailPage";
 import ProfilePage from "./pages/ProfilePage";
 import AdminPage from "./pages/AdminPage";
+import TimelinePage from "./pages/TimelinePage";
 import SetPasswordDialog from "./components/SetPasswordDialog";
 import TelegramLinkDialog from "./components/TelegramLinkDialog";
 
@@ -23,14 +24,35 @@ function GlobalSetPasswordGate() {
 
 function GlobalTelegramGate() {
   const { user, missingChannels, needsPasswordSetup, loading } = useAuth();
+  const [dismissed, setDismissed] = useState(false);
+
+  // Kullanıcı veya gating durumu değiştiğinde "dismissed"ı sıfırla, böylece
+  // yeni eksiklikler (ör. çıkış/yeniden giriş) yeniden tetiklenir
+  useEffect(() => {
+    setDismissed(false);
+  }, [user?.id, user?.telegram_id, (missingChannels || []).length]);
+
+  // Kullanıcı dilerse navbar'dan tekrar açabilsin
+  useEffect(() => {
+    const open = () => setDismissed(false);
+    window.addEventListener("svj:open-telegram-gate", open);
+    return () => window.removeEventListener("svj:open-telegram-gate", open);
+  }, []);
+
   // Don't fight with set-password modal (it must run first)
   if (loading || !user || needsPasswordSetup) return null;
   // Admins are moderators, not voters — they bypass the Telegram requirement.
   if (user.is_admin) return null;
   const needsTelegram = !user.telegram_id;
   const needsChannels = (missingChannels || []).length > 0;
-  const show = needsTelegram || needsChannels;
-  return <TelegramLinkDialog open={show} onOpenChange={() => {}} allowSkip={false} />;
+  const show = (needsTelegram || needsChannels) && !dismissed;
+  return (
+    <TelegramLinkDialog
+      open={show}
+      onOpenChange={(v) => { if (!v) setDismissed(true); }}
+      allowSkip={true}
+    />
+  );
 }
 
 function AppShell() {
@@ -53,6 +75,7 @@ function AppShell() {
             <Route path="/leaderboard" element={<LeaderboardPage />} />
             <Route path="/clip/:id" element={<ClipDetailPage />} />
             <Route path="/profil/:username" element={<ProfilePage />} />
+            <Route path="/akis-zaman" element={<TimelinePage />} />
             <Route path="/admin" element={<AdminPage />} />
           </Routes>
         </main>

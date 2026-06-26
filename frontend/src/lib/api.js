@@ -32,7 +32,8 @@ export function parseKickClipId(url) {
 }
 
 export function kickEmbedUrl(clipId) {
-  return `https://kick.com/clips/${clipId}/embed`;
+  // Kick'in resmi player embed endpoint'i. Streamer adına ihtiyaç duymaz.
+  return `https://player.kick.com/${clipId}`;
 }
 
 export function formatApiError(detail, fallback = "Bir hata oluştu") {

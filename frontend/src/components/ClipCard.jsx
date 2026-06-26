@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import ChannelGateDialog from "./ChannelGateDialog";
 import ReportClipDialog from "./ReportClipDialog";
+import ReactionBar from "./ReactionBar";
 
 export default function ClipCard({ clip, rank, onDeleted }) {
   const { user } = useAuth();
@@ -317,6 +318,8 @@ export default function ClipCard({ clip, rank, onDeleted }) {
           {votes}
         </motion.span>
       </motion.button>
+
+      <ReactionBar clipId={clip.id} initialReactions={clip.reactions || {}} initialMyReaction={clip.my_reaction} />
     </motion.div>
     <ChannelGateDialog open={gateOpen} onOpenChange={setGateOpen} missingChannels={missing} onRecheck={recheckGate} busy={busy} />
     <ReportClipDialog open={reportOpen} onOpenChange={setReportOpen} clipId={clip.id} clipTitle={clip.title} />

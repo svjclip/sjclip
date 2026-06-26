@@ -155,6 +155,15 @@ class ClipPublic(BaseModel):
     has_voted: bool = False
     votes_last_hour: int = 0
     is_hot: bool = False
+    reactions: Dict[str, int] = Field(default_factory=dict)
+    my_reaction: Optional[str] = None
+
+
+REACTION_EMOJIS = ["🔥", "👏", "😂", "😱", "❤️"]
+
+
+class ReactionRequest(BaseModel):
+    emoji: str
 
 
 # ----------------- Helpers -----------------
@@ -290,17 +299,27 @@ async def require_user(user: Optional[User] = Depends(get_current_user)) -> User
     return user
 
 
-async def attach_vote_status(clip_dict: dict, user_id: Optional[str], hot_map: Optional[Dict[str, int]] = None) -> ClipPublic:
+async def attach_vote_status(
+    clip_dict: dict,
+    user_id: Optional[str],
+    hot_map: Optional[Dict[str, int]] = None,
+    reactions_map: Optional[Dict[str, Dict[str, int]]] = None,
+    my_reactions_map: Optional[Dict[str, str]] = None,
+) -> ClipPublic:
     has_voted = False
     if user_id:
         v = await db.votes.find_one({"clip_id": clip_dict["id"], "user_id": user_id})
         has_voted = v is not None
     last_hour = (hot_map or {}).get(clip_dict["id"], 0)
+    reactions = (reactions_map or {}).get(clip_dict["id"], {})
+    my_reaction = (my_reactions_map or {}).get(clip_dict["id"])
     return ClipPublic(
         **clip_dict,
         has_voted=has_voted,
         votes_last_hour=last_hour,
         is_hot=last_hour >= FLAME_VOTES_THRESHOLD,
+        reactions=reactions,
+        my_reaction=my_reaction,
     )
 
 
@@ -317,6 +336,56 @@ async def compute_hot_map(clip_ids: List[str]) -> Dict[str, int]:
     async for row in db.votes.aggregate(pipeline):
         out[row["_id"]] = row["c"]
     return out
+
+
+async def compute_reactions_maps(clip_ids: List[str], user_id: Optional[str]) -> tuple[Dict[str, Dict[str, int]], Dict[str, str]]:
+    """Per-clip reaction counts grouped by emoji + the current user's own reaction."""
+    counts: Dict[str, Dict[str, int]] = {}
+    mine: Dict[str, str] = {}
+    if not clip_ids:
+        return counts, mine
+    pipeline = [
+        {"$match": {"clip_id": {"$in": clip_ids}}},
+        {"$group": {"_id": {"clip_id": "$clip_id", "emoji": "$emoji"}, "c": {"$sum": 1}}},
+    ]
+    async for row in db.reactions.aggregate(pipeline):
+        cid = row["_id"]["clip_id"]
+        em = row["_id"]["emoji"]
+        counts.setdefault(cid, {})[em] = row["c"]
+    if user_id:
+        async for r in db.reactions.find(
+            {"clip_id": {"$in": clip_ids}, "user_id": user_id}, {"_id": 0, "clip_id": 1, "emoji": 1}
+        ):
+            mine[r["clip_id"]] = r["emoji"]
+    return counts, mine
+
+
+async def record_event(
+    type_: str,
+    actor: User,
+    clip: Optional[dict] = None,
+    extras: Optional[dict] = None,
+) -> None:
+    """Append a denormalized event to the activity feed. Failures are non-fatal."""
+    try:
+        doc = {
+            "id": str(uuid.uuid4()),
+            "type": type_,
+            "actor_user_id": actor.id,
+            "actor_username": actor.username,
+            "actor_avatar_url": actor.avatar_url,
+            "created_at": now_iso(),
+        }
+        if clip:
+            doc["clip_id"] = clip.get("id")
+            doc["clip_title"] = clip.get("title")
+            doc["clip_kick_clip_id"] = clip.get("kick_clip_id")
+            doc["clip_submitter_username"] = clip.get("submitter_username")
+        if extras:
+            doc.update(extras)
+        await db.events.insert_one(doc)
+    except Exception as e:
+        logger.warning(f"record_event failed: {e}")
 
 
 def is_admin(user: Optional[User]) -> bool:
@@ -916,7 +985,9 @@ async def submit_clip(payload: ClipCreate, user: User = Depends(require_user)):
         submitter_username=user.username,
     )
     await db.clips.insert_one(clip.model_dump())
-    return await attach_vote_status(clip.model_dump(), user.id)
+    clip_doc = clip.model_dump()
+    await record_event("clip_submitted", user, clip_doc)
+    return await attach_vote_status(clip_doc, user.id)
 
 
 @api_router.get("/clips", response_model=List[ClipPublic])
@@ -932,8 +1003,10 @@ async def list_clips(
     cursor = db.clips.find(query, {"_id": 0}).sort(sort_field).limit(100)
     docs = await cursor.to_list(100)
     uid = user.id if user else None
-    hot_map = await compute_hot_map([d["id"] for d in docs])
-    return [await attach_vote_status(d, uid, hot_map) for d in docs]
+    cids = [d["id"] for d in docs]
+    hot_map = await compute_hot_map(cids)
+    rx_map, my_rx = await compute_reactions_maps(cids, uid)
+    return [await attach_vote_status(d, uid, hot_map, rx_map, my_rx) for d in docs]
 
 
 @api_router.get("/clips/{clip_id}", response_model=ClipPublic)
@@ -943,7 +1016,8 @@ async def get_clip(clip_id: str, user: Optional[User] = Depends(get_current_user
         raise HTTPException(status_code=404, detail="Clip not found")
     uid = user.id if user else None
     hot_map = await compute_hot_map([doc["id"]])
-    return await attach_vote_status(doc, uid, hot_map)
+    rx_map, my_rx = await compute_reactions_maps([doc["id"]], uid)
+    return await attach_vote_status(doc, uid, hot_map, rx_map, my_rx)
 
 
 @api_router.delete("/clips/{clip_id}")
@@ -1007,6 +1081,7 @@ async def vote_clip(clip_id: str, user: User = Depends(require_user)):
         # Clip was deleted in between — undo the vote
         await db.votes.delete_one({"clip_id": clip_id, "user_id": user.id})
         raise HTTPException(status_code=404, detail="Klip bulunamadı")
+    await record_event("vote_cast", user, res)
     return await attach_vote_status(res, user.id)
 
 
@@ -1038,8 +1113,10 @@ async def weekly_leaderboard(user: Optional[User] = Depends(get_current_user)):
     cursor = db.clips.find({"week_key": week}, {"_id": 0}).sort([("votes_count", -1), ("created_at", 1)]).limit(20)
     docs = await cursor.to_list(20)
     uid = user.id if user else None
-    hot_map = await compute_hot_map([d["id"] for d in docs])
-    return [await attach_vote_status(d, uid, hot_map) for d in docs]
+    cids = [d["id"] for d in docs]
+    hot_map = await compute_hot_map(cids)
+    rx_map, my_rx = await compute_reactions_maps(cids, uid)
+    return [await attach_vote_status(d, uid, hot_map, rx_map, my_rx) for d in docs]
 
 
 # ----------------- Stats / Profile / Reports -----------------
@@ -1070,8 +1147,10 @@ async def user_profile(username: str, viewer: Optional[User] = Depends(get_curre
     clip_cursor = db.clips.find({"submitter_id": doc["id"]}, {"_id": 0}).sort([("created_at", -1)]).limit(100)
     clips_raw = await clip_cursor.to_list(100)
     uid = viewer.id if viewer else None
-    hot_map = await compute_hot_map([c["id"] for c in clips_raw])
-    clips = [await attach_vote_status(c, uid, hot_map) for c in clips_raw]
+    cids = [c["id"] for c in clips_raw]
+    hot_map = await compute_hot_map(cids)
+    rx_map, my_rx = await compute_reactions_maps(cids, uid)
+    clips = [await attach_vote_status(c, uid, hot_map, rx_map, my_rx) for c in clips_raw]
     total_votes_received = sum(c.votes_count for c in clips)
     return {
         "user": {
@@ -1180,6 +1259,53 @@ async def admin_resolve_report(report_id: str, payload: ResolveReportRequest, ad
     return {"ok": True}
 
 
+# ----------------- Reactions (emoji) -----------------
+@api_router.post("/clips/{clip_id}/reactions")
+async def add_reaction(clip_id: str, payload: ReactionRequest, user: User = Depends(require_user)):
+    emoji = payload.emoji
+    if emoji not in REACTION_EMOJIS:
+        raise HTTPException(status_code=400, detail=f"Geçersiz emoji. İzinli: {' '.join(REACTION_EMOJIS)}")
+    clip = await db.clips.find_one({"id": clip_id}, {"_id": 0})
+    if not clip:
+        raise HTTPException(status_code=404, detail="Klip bulunamadı")
+    # Upsert: a user has at most ONE active reaction per clip (replaces previous emoji)
+    prev = await db.reactions.find_one({"clip_id": clip_id, "user_id": user.id}, {"_id": 0})
+    if prev and prev.get("emoji") == emoji:
+        return {"ok": True, "emoji": emoji, "changed": False}
+    await db.reactions.update_one(
+        {"clip_id": clip_id, "user_id": user.id},
+        {"$set": {
+            "clip_id": clip_id,
+            "user_id": user.id,
+            "username": user.username,
+            "emoji": emoji,
+            "created_at": now_iso(),
+        }},
+        upsert=True,
+    )
+    await record_event("reaction_added", user, clip, {"reaction_emoji": emoji})
+    return {"ok": True, "emoji": emoji, "changed": True}
+
+
+@api_router.delete("/clips/{clip_id}/reactions")
+async def remove_reaction(clip_id: str, user: User = Depends(require_user)):
+    await db.reactions.delete_one({"clip_id": clip_id, "user_id": user.id})
+    return {"ok": True}
+
+
+# ----------------- Activity feed (events) -----------------
+@api_router.get("/events")
+async def list_events(limit: int = 50, before: Optional[str] = None):
+    """Reverse-chronological global activity feed. Paginate via `before` (created_at ISO string)."""
+    limit = max(1, min(100, limit))
+    query: Dict[str, Any] = {}
+    if before:
+        query["created_at"] = {"$lt": before}
+    cursor = db.events.find(query, {"_id": 0}).sort([("created_at", -1)]).limit(limit)
+    rows = await cursor.to_list(limit)
+    return {"events": rows, "next_cursor": rows[-1]["created_at"] if len(rows) == limit else None}
+
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -1235,6 +1361,11 @@ async def startup():
     await db.password_reset_codes.create_index("user_id")
     await db.reports.create_index([("clip_id", 1), ("reporter_user_id", 1)], unique=True)
     await db.reports.create_index("created_at")
+    await db.reactions.create_index([("clip_id", 1), ("user_id", 1)], unique=True)
+    await db.reactions.create_index("clip_id")
+    await db.events.create_index([("created_at", -1)])
+    await db.events.create_index("actor_user_id")
+    await db.events.create_index("clip_id")
     # Register Telegram webhook on startup
     if TELEGRAM_BOT_TOKEN and PUBLIC_BACKEND_URL:
         webhook_url = f"{PUBLIC_BACKEND_URL}/api/telegram/webhook/{WEBHOOK_SECRET}"

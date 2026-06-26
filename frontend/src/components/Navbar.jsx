@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Trophy, Plus, Zap, LogOut, Send, Link2, ShieldCheck } from "lucide-react";
+import { Trophy, Plus, Zap, LogOut, Send, Link2, ShieldCheck, Activity } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { Button } from "./ui/button";
 import LoginDialog from "./LoginDialog";
@@ -42,9 +42,12 @@ export default function Navbar({ streamerName }) {
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
-            <NavLink to="/" end className={linkClass} data-testid="nav-feed">Akış</NavLink>
+            <NavLink to="/" end className={linkClass} data-testid="nav-feed">Klipler</NavLink>
             <NavLink to="/leaderboard" className={linkClass} data-testid="nav-leaderboard">
               <span className="inline-flex items-center gap-1.5"><Trophy className="w-4 h-4" />Sıralama</span>
+            </NavLink>
+            <NavLink to="/akis-zaman" className={linkClass} data-testid="nav-timeline">
+              <span className="inline-flex items-center gap-1.5"><Activity className="w-4 h-4" />Akış</span>
             </NavLink>
             {user?.is_admin && (
               <NavLink to="/admin" className={linkClass} data-testid="nav-admin">
@@ -65,12 +68,14 @@ export default function Navbar({ streamerName }) {
                     <Plus className="w-4 h-4 mr-1" /> Klip Gönder
                   </Button>
                 ) : user.is_admin ? null : (
-                  <div
-                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#FFD166]/40 bg-[#FFD166]/5 text-[11px] uppercase tracking-wider text-[#FFD166] font-bold"
-                    data-testid="nav-onboarding-hint"
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new Event("svj:open-telegram-gate"))}
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#FFD166]/40 bg-[#FFD166]/5 text-[11px] uppercase tracking-wider text-[#FFD166] font-bold hover:bg-[#FFD166]/10 hover:border-[#FFD166] transition-colors"
+                    data-testid="nav-open-telegram-gate-btn"
                   >
                     <Link2 className="w-3.5 h-3.5" /> Telegram Bağla
-                  </div>
+                  </button>
                 )}
                 <Link
                   to={`/profil/${user.username}`}
