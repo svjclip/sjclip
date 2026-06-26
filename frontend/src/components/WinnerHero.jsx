@@ -127,7 +127,7 @@ export default function WinnerHero({ clip, contestName }) {
               to={`/profil/${clip.submitter_username}`}
               className="text-xs uppercase tracking-[0.18em] text-zinc-500 hover:text-zinc-300 underline-offset-4 hover:underline transition-colors"
             >
-              Yayıncı profili →
+              Profili ziyaret et →
             </Link>
           </div>
         </div>

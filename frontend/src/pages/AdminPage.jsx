@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ShieldCheck, AlertTriangle, Trash2, Eye, CheckCircle2, Users, Send, Film, ThumbsUp, Flame } from "lucide-react";
+import { ShieldCheck, AlertTriangle, Trash2, Eye, CheckCircle2, Users, Send, Film, ThumbsUp, Flame, Flag } from "lucide-react";
 import { api, formatApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import PrizeSettings from "../components/PrizeSettings";
 import ContestManager from "../components/ContestManager";
 import BroadcastForm from "../components/BroadcastForm";
 import AdminUserList from "../components/AdminUserList";
+import FlaggedClips from "../components/FlaggedClips";
 
 function StatTile({ icon: Icon, label, value, accent, testid }) {
   return (
@@ -94,6 +95,7 @@ export default function AdminPage() {
           <StatTile icon={ThumbsUp} label="Toplam Oy" value={stats.votes_total} testid="admin-stat-votes" />
           <StatTile icon={AlertTriangle} label="Açık Rapor" value={stats.reports_open} accent testid="admin-stat-open-reports" />
           <StatTile icon={CheckCircle2} label="Kapanan Rapor" value={stats.reports_resolved} testid="admin-stat-resolved" />
+          <StatTile icon={Flag} label="Bayraklı Klip" value={stats.flagged_clips ?? 0} accent={(stats.flagged_clips ?? 0) > 0} testid="admin-stat-flagged" />
         </div>
       )}
 
@@ -108,6 +110,9 @@ export default function AdminPage() {
 
       {/* USER LIST */}
       <AdminUserList />
+
+      {/* FLAGGED CLIPS */}
+      <FlaggedClips />
 
       {/* REPORTS */}
       <div className="flex items-end justify-between mb-4">

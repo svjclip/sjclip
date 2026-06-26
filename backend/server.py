@@ -50,6 +50,14 @@ COMMUNITY_DISPLAY_MULTIPLIER = int(os.environ.get('COMMUNITY_DISPLAY_MULTIPLIER'
 ADMIN_USERNAMES = {u.strip().lower() for u in os.environ.get('ADMIN_USERNAMES', '').split(',') if u.strip()}
 # Flame badge threshold: clips with this many votes in the last hour get a "hot" flag.
 FLAME_VOTES_THRESHOLD = int(os.environ.get('FLAME_VOTES_THRESHOLD', '3'))
+# Rate limits for voting (anti-abuse).
+VOTE_PER_USER_PER_MIN = int(os.environ.get('VOTE_PER_USER_PER_MIN', '5'))
+VOTE_PER_USER_PER_HOUR = int(os.environ.get('VOTE_PER_USER_PER_HOUR', '30'))
+VOTE_PER_IP_PER_MIN = int(os.environ.get('VOTE_PER_IP_PER_MIN', '10'))
+# Auto-flag: if a clip receives this many votes within AUTOFLAG_WINDOW_SECONDS,
+# mark it for admin review (suspected bot/coordinated voting).
+AUTOFLAG_VOTES_THRESHOLD = int(os.environ.get('AUTOFLAG_VOTES_THRESHOLD', '10'))
+AUTOFLAG_WINDOW_SECONDS = int(os.environ.get('AUTOFLAG_WINDOW_SECONDS', '60'))
 
 app = FastAPI(title=f"{STREAMER_NAME} Clip Voting API")
 api_router = APIRouter(prefix="/api")
@@ -486,6 +494,19 @@ async def record_event(
 
 def is_admin(user: Optional[User]) -> bool:
     return bool(user and user.username and user.username.lower() in ADMIN_USERNAMES)
+
+
+def client_ip(request: Request) -> Optional[str]:
+    """Best-effort client IP behind k8s ingress / reverse proxies.
+    Prefer the first hop in X-Forwarded-For, fall back to the direct client.
+    """
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip() or None
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip() or None
+    return request.client.host if request.client else None
 
 
 async def require_admin(user: User = Depends(require_user)) -> User:
@@ -1467,12 +1488,14 @@ async def mark_all_notifications_read(user: User = Depends(require_user)):
 
 
 @api_router.post("/clips/{clip_id}/vote", response_model=ClipPublic)
-async def vote_clip(clip_id: str, user: User = Depends(require_user)):
+async def vote_clip(clip_id: str, request: Request, user: User = Depends(require_user)):
     """Cast a vote. Hardened against:
     - duplicate votes (unique index + atomic try/except)
     - self-voting
     - votes on past-week clips (only current week is voteable)
     - votes from accounts without Telegram + required channels
+    - rate-limited per-user (5/min, 30/hr) and per-IP (10/min)
+    - auto-flags clips that receive 10+ votes within 60s (suspected coordinated voting)
     """
     # Contest gate: there must be an ACTIVE contest right now. Outside the
     # configured window (or when no contest is scheduled) all new votes are
@@ -1502,11 +1525,27 @@ async def vote_clip(clip_id: str, user: User = Depends(require_user)):
     # Week gate: only this week's clips can be voted on (contest integrity)
     if doc.get("week_key") != current_week_key():
         raise HTTPException(status_code=403, detail="Sadece bu haftaki kliplere oy verilebilir")
+    # ---- Rate limit checks (per-user + per-IP) ----
+    ip = client_ip(request)
+    now = datetime.now(timezone.utc)
+    iso_minute_ago = (now - timedelta(seconds=60)).isoformat()
+    iso_hour_ago = (now - timedelta(seconds=3600)).isoformat()
+    user_recent_min = await db.votes.count_documents({"user_id": user.id, "created_at": {"$gte": iso_minute_ago}})
+    if user_recent_min >= VOTE_PER_USER_PER_MIN:
+        raise HTTPException(status_code=429, detail=f"Çok hızlı oy veriyorsun. Dakikada {VOTE_PER_USER_PER_MIN} oydan fazlasına izin verilmiyor.")
+    user_recent_hour = await db.votes.count_documents({"user_id": user.id, "created_at": {"$gte": iso_hour_ago}})
+    if user_recent_hour >= VOTE_PER_USER_PER_HOUR:
+        raise HTTPException(status_code=429, detail=f"Saatlik oy limitine ulaştın ({VOTE_PER_USER_PER_HOUR} oy). Biraz sonra tekrar dene.")
+    if ip:
+        ip_recent_min = await db.votes.count_documents({"ip": ip, "created_at": {"$gte": iso_minute_ago}})
+        if ip_recent_min >= VOTE_PER_IP_PER_MIN:
+            raise HTTPException(status_code=429, detail="Bu ağdan çok hızlı oy geliyor. Lütfen biraz bekle.")
     # Atomic vote: rely on the (clip_id, user_id) unique index to enforce one-vote-per-user.
     try:
         await db.votes.insert_one({
             "clip_id": clip_id,
             "user_id": user.id,
+            "ip": ip,
             "created_at": now_iso(),
         })
     except DuplicateKeyError:
@@ -1522,6 +1561,19 @@ async def vote_clip(clip_id: str, user: User = Depends(require_user)):
         # Clip was deleted in between — undo the vote
         await db.votes.delete_one({"clip_id": clip_id, "user_id": user.id})
         raise HTTPException(status_code=404, detail="Klip bulunamadı")
+    # ---- Auto-flag check (suspicious vote burst on this clip) ----
+    if not res.get("flagged_at"):
+        burst_window = (now - timedelta(seconds=AUTOFLAG_WINDOW_SECONDS)).isoformat()
+        burst = await db.votes.count_documents({"clip_id": clip_id, "created_at": {"$gte": burst_window}})
+        if burst >= AUTOFLAG_VOTES_THRESHOLD:
+            await db.clips.update_one(
+                {"id": clip_id, "flagged_at": {"$exists": False}},
+                {"$set": {
+                    "flagged_at": now_iso(),
+                    "flag_reason": f"rapid_votes:{burst}_in_{AUTOFLAG_WINDOW_SECONDS}s",
+                }},
+            )
+            logger.warning(f"Auto-flagged clip {clip_id}: {burst} votes in {AUTOFLAG_WINDOW_SECONDS}s")
     await record_event("vote_cast", user, res)
     return await attach_vote_status(res, user.id)
 
@@ -1669,7 +1721,39 @@ async def admin_stats(admin: User = Depends(require_admin)):
         "votes_total": await db.votes.count_documents({}),
         "reports_open": await db.reports.count_documents({"status": "open"}),
         "reports_resolved": await db.reports.count_documents({"status": "resolved"}),
+        "flagged_clips": await db.clips.count_documents({"flagged_at": {"$exists": True, "$ne": None}}),
     }
+
+
+@api_router.get("/admin/flagged-clips")
+async def admin_flagged_clips(admin: User = Depends(require_admin)):
+    """Clips auto-flagged by the anti-abuse system (suspected coordinated voting).
+    Admin can dismiss the flag or delete the clip."""
+    cursor = db.clips.find(
+        {"flagged_at": {"$exists": True, "$ne": None}},
+        {"_id": 0},
+    ).sort([("flagged_at", -1)]).limit(200)
+    rows = await cursor.to_list(200)
+    # Attach a small votes-per-minute-burst breakdown for the last 60s
+    now = datetime.now(timezone.utc)
+    minute_ago = (now - timedelta(seconds=60)).isoformat()
+    out: List[Dict[str, Any]] = []
+    for c in rows:
+        recent = await db.votes.count_documents({"clip_id": c["id"], "created_at": {"$gte": minute_ago}})
+        out.append({**c, "votes_last_minute": recent})
+    return {"clips": out, "count": len(out)}
+
+
+@api_router.post("/admin/flagged-clips/{clip_id}/clear")
+async def admin_clear_flag(clip_id: str, admin: User = Depends(require_admin)):
+    """Dismiss an auto-flag (admin reviewed and accepted the clip)."""
+    res = await db.clips.update_one(
+        {"id": clip_id},
+        {"$unset": {"flagged_at": "", "flag_reason": ""}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Klip bulunamadı")
+    return {"ok": True}
 
 
 @api_router.get("/admin/users")
@@ -1945,6 +2029,12 @@ async def startup():
         name="email_partial",
     )
     await db.votes.create_index([("clip_id", 1), ("user_id", 1)], unique=True)
+    # Rate-limit + auto-flag queries: hot reads on (user_id, created_at), (ip, created_at), (clip_id, created_at)
+    await db.votes.create_index([("user_id", 1), ("created_at", -1)], name="votes_user_recent")
+    await db.votes.create_index([("ip", 1), ("created_at", -1)], name="votes_ip_recent", sparse=True)
+    await db.votes.create_index([("clip_id", 1), ("created_at", -1)], name="votes_clip_recent")
+    # Flagged clips listing
+    await db.clips.create_index("flagged_at", name="clips_flagged_at", sparse=True)
     await db.verify_codes.create_index("code", unique=True)
     await db.verify_codes.create_index("telegram_id")
     await db.password_reset_codes.create_index("code", unique=True)
