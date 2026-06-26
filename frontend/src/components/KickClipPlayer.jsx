@@ -25,10 +25,11 @@ export default function KickClipPlayer({ clip, autoPlay = false }) {
   const cleanClipId = clip?.kick_clip_id?.startsWith("clip_")
     ? clip.kick_clip_id
     : `clip_${clip?.kick_clip_id || ""}`;
-  const parentHost = typeof window !== "undefined" ? window.location.hostname : "";
-  const iframeUrl = `https://player.kick.com/embed/clips/${cleanClipId}?parent=${encodeURIComponent(
-    parentHost
-  )}`;
+  // Kick's parent handshake is strict: lower-case bare hostname, no protocol, no port.
+  // Anything else (including URL-encoded chars) triggers "This embed seems to be misconfigured".
+  const rawHost = typeof window !== "undefined" ? window.location.hostname : "";
+  const cleanDomain = rawHost.toLowerCase().replace(/:\d+$/, "");
+  const iframeUrl = `https://player.kick.com/embed/clips/${cleanClipId}?parent=${cleanDomain}`;
 
   // If iframe doesn't load within ~5s, assume Kick blocked it and switch to HLS.
   useEffect(() => {
