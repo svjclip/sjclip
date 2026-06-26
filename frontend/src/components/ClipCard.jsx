@@ -1,8 +1,8 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronUp, ExternalLink, Play, Flag, Check, Flame, Trash2 } from "lucide-react";
+import { ChevronUp, ExternalLink, Flag, Check, Flame, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { api, kickEmbedUrl, formatApiError } from "../lib/api";
+import { api, formatApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,11 +10,11 @@ import ChannelGateDialog from "./ChannelGateDialog";
 import ReportClipDialog from "./ReportClipDialog";
 import ReactionBar from "./ReactionBar";
 import ShareClipMenu from "./ShareClipMenu";
+import KickClipPlayer from "./KickClipPlayer";
 
 export default function ClipCard({ clip, rank, onDeleted }) {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [voted, setVoted] = useState(clip.has_voted);
   const [votes, setVotes] = useState(clip.votes_count);
@@ -29,11 +29,10 @@ export default function ClipCard({ clip, rank, onDeleted }) {
   const isAdmin = user && user.is_admin;
   const canDelete = isOwner || isAdmin;
 
-  const handleMouseEnter = () => {
-    if (playing) return;
-    // 800ms hover → auto-play preview
-    hoverTimer.current = setTimeout(() => setPlaying(true), 800);
-  };
+  // Hover behaviour kept as a stub to preserve API symmetry; auto-play preview
+  // is disabled because the HLS player is heavy and we don't want every card
+  // streaming on cursor pass-by. User clicks Play to start.
+  const handleMouseEnter = () => {};
   const handleMouseLeave = () => {
     if (hoverTimer.current) {
       clearTimeout(hoverTimer.current);
@@ -176,29 +175,7 @@ export default function ClipCard({ clip, rank, onDeleted }) {
       )}
 
       <div className="relative aspect-video bg-black overflow-hidden">
-        {playing ? (
-          <iframe
-            src={kickEmbedUrl(clip.kick_clip_id) + "?muted=true"}
-            className="w-full h-full"
-            allow="autoplay; fullscreen"
-            allowFullScreen
-            title={clip.title}
-            data-testid={`clip-iframe-${clip.id}`}
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setPlaying(true)}
-            className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-900 via-black to-zinc-900 group/play"
-            data-testid={`clip-play-${clip.id}`}
-          >
-            <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_center,_rgba(83,252,24,0.3),_transparent_60%)]" />
-            <div className="relative w-16 h-16 rounded-full bg-[#53FC18] flex items-center justify-center transform transition-transform group-hover/play:scale-110 group-hover/play:shadow-[0_0_40px_rgba(83,252,24,0.6)]">
-              <Play className="w-7 h-7 text-black ml-1" fill="black" />
-            </div>
-            <div className="absolute bottom-3 right-3 px-2 py-0.5 rounded bg-black/60 text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Kick Klip</div>
-          </button>
-        )}
+        <KickClipPlayer clip={clip} />
 
         {/* Vote confirmation overlay */}
         <AnimatePresence>

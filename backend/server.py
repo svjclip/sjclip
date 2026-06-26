@@ -11,6 +11,7 @@ import logging
 import secrets
 import string
 import httpx
+import asyncio
 import bcrypt
 import jwt
 from pathlib import Path
@@ -129,6 +130,7 @@ class Clip(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     kick_url: str
     kick_clip_id: str
+    kick_shard: Optional[str] = None  # 2-char hex CDN shard, discovered async
     title: str
     submitter_id: str
     submitter_username: str
@@ -146,6 +148,7 @@ class ClipPublic(BaseModel):
     id: str
     kick_url: str
     kick_clip_id: str
+    kick_shard: Optional[str] = None
     title: str
     submitter_id: str
     submitter_username: str
@@ -188,6 +191,48 @@ def parse_kick_clip_id(url: str) -> Optional[str]:
         m = pattern.search(url)
         if m:
             return m.group(1)
+    return None
+
+
+# --- Kick CDN shard discovery -------------------------------------------------
+# Kick stores clip HLS playlists at https://clips.kick.com/clips/<shard>/<clip_id>/playlist.m3u8
+# where <shard> is a 2-char lowercase hex bucket assigned at clip-creation time.
+# Kick's public API is region-blocked from our pod, but clips.kick.com (CloudFront)
+# is freely reachable. We probe all 256 possible shards in parallel and use the
+# first that returns HTTP 200. Result is cached in MongoDB on the clip document.
+KICK_SHARD_ALPHABET = "0123456789abcdef"
+KICK_SHARD_CANDIDATES = [a + b for a in KICK_SHARD_ALPHABET for b in KICK_SHARD_ALPHABET]
+
+
+async def discover_kick_shard(clip_id: str) -> Optional[str]:
+    """Probe Kick's CDN for the shard of a clip. Returns 2-char hex or None."""
+    if not clip_id:
+        return None
+    async with httpx.AsyncClient(timeout=4.0, follow_redirects=False) as client:
+        async def probe(shard: str) -> Optional[str]:
+            url = f"https://clips.kick.com/clips/{shard}/{clip_id}/playlist.m3u8"
+            try:
+                r = await client.head(url)
+                if r.status_code == 200:
+                    return shard
+            except Exception:
+                return None
+            return None
+
+        tasks = [asyncio.create_task(probe(s)) for s in KICK_SHARD_CANDIDATES]
+        try:
+            for coro in asyncio.as_completed(tasks):
+                shard = await coro
+                if shard:
+                    for t in tasks:
+                        if not t.done():
+                            t.cancel()
+                    return shard
+        finally:
+            # Best-effort cleanup of any remaining tasks
+            for t in tasks:
+                if not t.done():
+                    t.cancel()
     return None
 
 
@@ -977,9 +1022,18 @@ async def submit_clip(payload: ClipCreate, user: User = Depends(require_user)):
     existing = await db.clips.find_one({"kick_clip_id": clip_id}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=409, detail="Bu klip daha önce gönderilmiş")
+    # 4) Resolve CDN shard so the frontend can stream HLS in-page.
+    # Discovery is best-effort (clips.kick.com is reachable from our pod region).
+    try:
+        shard = await asyncio.wait_for(discover_kick_shard(clip_id), timeout=8.0)
+    except asyncio.TimeoutError:
+        shard = None
+    except Exception:
+        shard = None
     clip = Clip(
         kick_url=payload.kick_url.strip(),
         kick_clip_id=clip_id,
+        kick_shard=shard,
         title=title,
         submitter_id=user.id,
         submitter_username=user.username,
@@ -988,6 +1042,27 @@ async def submit_clip(payload: ClipCreate, user: User = Depends(require_user)):
     clip_doc = clip.model_dump()
     await record_event("clip_submitted", user, clip_doc)
     return await attach_vote_status(clip_doc, user.id)
+
+
+@api_router.post("/clips/{clip_id}/resolve-shard", response_model=ClipPublic)
+async def resolve_clip_shard(clip_id: str, user: Optional[User] = Depends(get_current_user)):
+    """Lazy-discover the CDN shard for an existing clip (for clips submitted
+    before shard discovery existed, or where prior discovery failed). Safe to
+    call without auth: it only mutates a derived public field."""
+    doc = await db.clips.find_one({"id": clip_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Klip bulunamadı")
+    if doc.get("kick_shard"):
+        return await attach_vote_status(doc, user.id if user else None)
+    shard = None
+    try:
+        shard = await asyncio.wait_for(discover_kick_shard(doc["kick_clip_id"]), timeout=8.0)
+    except Exception:
+        shard = None
+    if shard:
+        await db.clips.update_one({"id": clip_id}, {"$set": {"kick_shard": shard}})
+        doc["kick_shard"] = shard
+    return await attach_vote_status(doc, user.id if user else None)
 
 
 @api_router.get("/clips", response_model=List[ClipPublic])

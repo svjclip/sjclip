@@ -46,8 +46,11 @@ export default function ShareClipMenu({ clipId, title }) {
         <button
           type="button"
           onClick={(e) => {
-            e.preventDefault();
+            // Radix Popover'ın toggle'ını manuel tetikliyoruz çünkü ClipCard
+            // içindeki <Link> parent'a olayın yayılmamasını da istiyoruz.
             e.stopPropagation();
+            e.preventDefault();
+            setOpen((o) => !o);
           }}
           className="text-zinc-500 hover:text-[#53FC18] transition-colors flex-shrink-0"
           aria-label="Klibi paylaş"

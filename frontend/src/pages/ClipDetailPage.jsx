@@ -3,11 +3,12 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronUp, ArrowLeft, ExternalLink, Clock, Flag, Check } from "lucide-react";
-import { api, kickEmbedUrl, formatApiError } from "../lib/api";
+import { api, formatApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
 import ReportClipDialog from "../components/ReportClipDialog";
 import ShareClipMenu from "../components/ShareClipMenu";
+import KickClipPlayer from "../components/KickClipPlayer";
 
 export default function ClipDetailPage() {
   const { id } = useParams();
@@ -62,14 +63,7 @@ export default function ClipDetailPage() {
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
         <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black aspect-video">
-          <iframe
-            src={kickEmbedUrl(clip.kick_clip_id)}
-            className="w-full h-full"
-            allow="autoplay; fullscreen"
-            allowFullScreen
-            title={clip.title}
-            data-testid="clip-detail-iframe"
-          />
+          <KickClipPlayer clip={clip} autoPlay />
           <AnimatePresence>
             {showVotedFlash && (
               <motion.div

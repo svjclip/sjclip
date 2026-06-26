@@ -32,9 +32,7 @@ export function parseKickClipId(url) {
 }
 
 export function kickEmbedUrl(clipId) {
-  // Kick'in clip embed'i streamer adı dahil tam yolu ister:
-  // https://kick.com/<streamer>/clips/<clip_id>/embed
-  // Sistem zaten yalnızca @slotjack kliplerini kabul ediyor, bu yüzden hardcode güvenli.
+  // Deprecated — kept for backward compat; KickClipPlayer now uses HLS via hls.js.
   return `https://kick.com/slotjack/clips/${clipId}/embed`;
 }
 
