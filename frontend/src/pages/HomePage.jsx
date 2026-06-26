@@ -13,7 +13,8 @@ import LoginDialog from "../components/LoginDialog";
 import SubmitClipDialog from "../components/SubmitClipDialog";
 
 export default function HomePage({ streamerName }) {
-  const { user } = useAuth();
+  const { user, missingChannels } = useAuth();
+  const fullyOnboarded = !!user && !!user.telegram_id && (missingChannels || []).length === 0;
   const [sort, setSort] = useState("top");
   const [loginOpen, setLoginOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
@@ -73,7 +74,7 @@ export default function HomePage({ streamerName }) {
             </p>
 
             <div className="mt-12 flex flex-wrap items-center gap-4">
-              {user ? (
+              {fullyOnboarded ? (
                 <Button
                   onClick={() => setSubmitOpen(true)}
                   className="h-14 px-8 bg-[#53FC18] text-black font-bold text-base rounded-2xl hover:bg-[#3ECA0D] hover:shadow-[0_0_40px_rgba(83,252,24,0.5)] hover:-translate-y-0.5 transition-all"
@@ -87,7 +88,7 @@ export default function HomePage({ streamerName }) {
                   className="h-14 px-8 bg-[#53FC18] text-black font-bold text-base rounded-2xl hover:bg-[#3ECA0D] hover:shadow-[0_0_40px_rgba(83,252,24,0.5)] hover:-translate-y-0.5 transition-all"
                   data-testid="hero-login-btn"
                 >
-                  Arenaya Gir <ArrowRight className="w-5 h-5 ml-2" />
+                  {user ? "Telegram Bağla" : "Arenaya Gir"} <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               )}
               <a href="#feed" className="h-14 px-8 inline-flex items-center font-bold text-base rounded-2xl border border-white/10 hover:border-white/30 hover:bg-white/5 transition-all" data-testid="hero-feed-btn">
@@ -188,13 +189,13 @@ export default function HomePage({ streamerName }) {
             <Sparkles className="w-10 h-10 text-[#53FC18] mx-auto mb-4" />
             <h3 className="font-display font-bold text-2xl mb-2">Henüz klip yok.</h3>
             <p className="text-zinc-500 mb-6">Arenaya ilk klibi sen bırak.</p>
-            {user ? (
+            {fullyOnboarded ? (
               <Button onClick={() => setSubmitOpen(true)} className="bg-[#53FC18] text-black font-bold rounded-xl" data-testid="empty-submit-btn">
                 İlk Klibi Gönder
               </Button>
             ) : (
               <Button onClick={() => setLoginOpen(true)} className="bg-[#53FC18] text-black font-bold rounded-xl" data-testid="empty-login-btn">
-                Göndermek için Giriş Yap
+                {user ? "Telegram Bağla" : "Göndermek için Giriş Yap"}
               </Button>
             )}
           </div>

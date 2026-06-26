@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Trophy, Plus, Zap, LogOut, Send } from "lucide-react";
+import { Trophy, Plus, Zap, LogOut, Send, Link2 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { Button } from "./ui/button";
 import LoginDialog from "./LoginDialog";
@@ -9,10 +9,13 @@ import SubmitClipDialog from "./SubmitClipDialog";
 import AvatarPicker from "./AvatarPicker";
 
 export default function Navbar({ streamerName }) {
-  const { user, logout } = useAuth();
+  const { user, logout, missingChannels } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
+
+  // Fully onboarded = logged in + Telegram linked + all required channels joined
+  const fullyOnboarded = !!user && !!user.telegram_id && (missingChannels || []).length === 0;
 
   const linkClass = ({ isActive }) =>
     `font-display text-sm tracking-wider uppercase transition-colors ${
@@ -48,15 +51,34 @@ export default function Navbar({ streamerName }) {
           <div className="flex items-center gap-3">
             {user ? (
               <>
-                <Button
-                  onClick={() => setSubmitOpen(true)}
-                  className="bg-[#53FC18] text-black font-bold hover:bg-[#3ECA0D] hover:shadow-[0_0_20px_rgba(83,252,24,0.5)] rounded-xl"
-                  data-testid="submit-clip-btn"
+                {fullyOnboarded ? (
+                  <Button
+                    onClick={() => setSubmitOpen(true)}
+                    className="bg-[#53FC18] text-black font-bold hover:bg-[#3ECA0D] hover:shadow-[0_0_20px_rgba(83,252,24,0.5)] rounded-xl"
+                    data-testid="submit-clip-btn"
+                  >
+                    <Plus className="w-4 h-4 mr-1" /> Klip Gönder
+                  </Button>
+                ) : (
+                  <div
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#FFD166]/40 bg-[#FFD166]/5 text-[11px] uppercase tracking-wider text-[#FFD166] font-bold"
+                    data-testid="nav-onboarding-hint"
+                  >
+                    <Link2 className="w-3.5 h-3.5" /> Telegram Bağla
+                  </div>
+                )}
+                <Link
+                  to={`/profil/${user.username}`}
+                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:border-[#53FC18]/30 transition-colors"
+                  data-testid="user-chip"
                 >
-                  <Plus className="w-4 h-4 mr-1" /> Klip Gönder
-                </Button>
-                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10" data-testid="user-chip">
-                  <button onClick={() => setAvatarOpen(true)} className="w-6 h-6 rounded-full overflow-hidden bg-[#53FC18]/20 flex items-center justify-center text-[#53FC18] text-xs font-bold hover:ring-2 hover:ring-[#53FC18]" data-testid="open-avatar-picker-btn" aria-label="Avatarı değiştir">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); setAvatarOpen(true); }}
+                    className="w-6 h-6 rounded-full overflow-hidden bg-[#53FC18]/20 flex items-center justify-center text-[#53FC18] text-xs font-bold hover:ring-2 hover:ring-[#53FC18]"
+                    data-testid="open-avatar-picker-btn"
+                    aria-label="Avatarı değiştir"
+                  >
                     {user.avatar_url ? (
                       <img src={user.avatar_url} alt={user.username} className="w-full h-full object-cover" />
                     ) : (
@@ -64,10 +86,16 @@ export default function Navbar({ streamerName }) {
                     )}
                   </button>
                   <span className="text-sm font-medium">{user.username}</span>
-                  <button onClick={logout} className="text-zinc-500 hover:text-white" data-testid="logout-btn" aria-label="Çıkış">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); logout(); }}
+                    className="text-zinc-500 hover:text-white"
+                    data-testid="logout-btn"
+                    aria-label="Çıkış"
+                  >
                     <LogOut className="w-4 h-4" />
                   </button>
-                </div>
+                </Link>
               </>
             ) : (
               <Button

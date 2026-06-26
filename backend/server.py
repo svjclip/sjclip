@@ -932,6 +932,75 @@ async def weekly_leaderboard(user: Optional[User] = Depends(get_current_user)):
     return [await attach_vote_status(d, uid) for d in docs]
 
 
+# ----------------- Stats / Profile / Reports -----------------
+@api_router.get("/stats/community")
+async def community_stats():
+    """Public counter for landing/onboarding gamification."""
+    total = await db.users.count_documents({})
+    fully_onboarded = await db.users.count_documents({"telegram_id": {"$type": "string"}})
+    return {
+        "total_members": total,
+        "telegram_linked": fully_onboarded,
+        "next_position": total + 1,
+    }
+
+
+@api_router.get("/users/{username}")
+async def user_profile(username: str, viewer: Optional[User] = Depends(get_current_user)):
+    """Public profile: user info + their submitted clips + aggregate stats."""
+    doc = await db.users.find_one({"username": username}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    # User's clips (most recent first)
+    clip_cursor = db.clips.find({"submitter_id": doc["id"]}, {"_id": 0}).sort([("created_at", -1)]).limit(100)
+    clips_raw = await clip_cursor.to_list(100)
+    uid = viewer.id if viewer else None
+    clips = [await attach_vote_status(c, uid) for c in clips_raw]
+    total_votes_received = sum(c.votes_count for c in clips)
+    return {
+        "user": {
+            "id": doc["id"],
+            "username": doc["username"],
+            "avatar_url": doc.get("avatar_url"),
+            "has_telegram": bool(doc.get("telegram_id")),
+            "created_at": doc.get("created_at"),
+        },
+        "stats": {
+            "clips_count": len(clips),
+            "total_votes_received": total_votes_received,
+        },
+        "clips": [c.model_dump() for c in clips],
+    }
+
+
+class ReportClipRequest(BaseModel):
+    reason: str
+
+
+@api_router.post("/clips/{clip_id}/report")
+async def report_clip(clip_id: str, payload: ReportClipRequest, user: User = Depends(require_user)):
+    reason = (payload.reason or "").strip()
+    if len(reason) < 3 or len(reason) > 500:
+        raise HTTPException(status_code=400, detail="Sebep 3-500 karakter arası olmalı")
+    clip = await db.clips.find_one({"id": clip_id}, {"_id": 0, "id": 1})
+    if not clip:
+        raise HTTPException(status_code=404, detail="Klip bulunamadı")
+    # one report per user per clip
+    existing = await db.reports.find_one({"clip_id": clip_id, "reporter_user_id": user.id})
+    if existing:
+        raise HTTPException(status_code=409, detail="Bu klibi zaten raporladın")
+    await db.reports.insert_one({
+        "id": str(uuid.uuid4()),
+        "clip_id": clip_id,
+        "reporter_user_id": user.id,
+        "reporter_username": user.username,
+        "reason": reason,
+        "status": "open",
+        "created_at": now_iso(),
+    })
+    return {"ok": True}
+
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -985,6 +1054,8 @@ async def startup():
     await db.verify_codes.create_index("telegram_id")
     await db.password_reset_codes.create_index("code", unique=True)
     await db.password_reset_codes.create_index("user_id")
+    await db.reports.create_index([("clip_id", 1), ("reporter_user_id", 1)], unique=True)
+    await db.reports.create_index("created_at")
     # Register Telegram webhook on startup
     if TELEGRAM_BOT_TOKEN and PUBLIC_BACKEND_URL:
         webhook_url = f"{PUBLIC_BACKEND_URL}/api/telegram/webhook/{WEBHOOK_SECRET}"

@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronUp, ExternalLink, Play } from "lucide-react";
+import { ChevronUp, ExternalLink, Play, Flag } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api, kickEmbedUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import ChannelGateDialog from "./ChannelGateDialog";
+import ReportClipDialog from "./ReportClipDialog";
 
 export default function ClipCard({ clip, rank }) {
   const { user } = useAuth();
@@ -16,6 +17,7 @@ export default function ClipCard({ clip, rank }) {
   const [voted, setVoted] = useState(clip.has_voted);
   const [votes, setVotes] = useState(clip.votes_count);
   const [gateOpen, setGateOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [missing, setMissing] = useState([]);
 
   const toggleVote = async (e) => {
@@ -132,31 +134,49 @@ export default function ClipCard({ clip, rank }) {
         </div>
 
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
+          <Link
+            to={`/profil/${clip.submitter_username}`}
+            className="flex items-center gap-2 text-xs text-zinc-500 hover:text-[#53FC18] transition-colors"
+            data-testid={`clip-submitter-link-${clip.id}`}
+          >
             <div className="w-6 h-6 rounded-full bg-[#53FC18]/15 flex items-center justify-center text-[#53FC18] text-[10px] font-bold">
               {clip.submitter_username[0].toUpperCase()}
             </div>
             <span data-testid={`clip-submitter-${clip.id}`}>{clip.submitter_username}</span>
-          </div>
+          </Link>
 
-          <motion.button
-            onClick={toggleVote}
-            disabled={busy}
-            whileTap={{ scale: 0.9 }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-mono text-sm font-bold transition-all ${
-              voted
-                ? "bg-[#53FC18] text-black border-[#53FC18] shadow-[0_0_15px_rgba(83,252,24,0.4)]"
-                : "bg-white/5 text-white border-white/10 hover:border-[#53FC18]/50 hover:bg-[#53FC18]/10"
-            }`}
-            data-testid={`upvote-btn-${clip.id}`}
-          >
-            <ChevronUp className="w-4 h-4" />
-            <span data-testid={`vote-count-${clip.id}`}>{votes}</span>
-          </motion.button>
+          <div className="flex items-center gap-2">
+            {user && user.username !== clip.submitter_username && (
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setReportOpen(true); }}
+                className="text-zinc-600 hover:text-[#FFD166] transition-colors p-1.5"
+                aria-label="Klibi raporla"
+                data-testid={`report-clip-btn-${clip.id}`}
+              >
+                <Flag className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <motion.button
+              onClick={toggleVote}
+              disabled={busy}
+              whileTap={{ scale: 0.9 }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-mono text-sm font-bold transition-all ${
+                voted
+                  ? "bg-[#53FC18] text-black border-[#53FC18] shadow-[0_0_15px_rgba(83,252,24,0.4)]"
+                  : "bg-white/5 text-white border-white/10 hover:border-[#53FC18]/50 hover:bg-[#53FC18]/10"
+              }`}
+              data-testid={`upvote-btn-${clip.id}`}
+            >
+              <ChevronUp className="w-4 h-4" />
+              <span data-testid={`vote-count-${clip.id}`}>{votes}</span>
+            </motion.button>
+          </div>
         </div>
       </div>
     </motion.div>
     <ChannelGateDialog open={gateOpen} onOpenChange={setGateOpen} missingChannels={missing} onRecheck={recheckGate} busy={busy} />
+    <ReportClipDialog open={reportOpen} onOpenChange={setReportOpen} clipId={clip.id} clipTitle={clip.title} />
     </>
   );
 }

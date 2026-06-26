@@ -18,6 +18,7 @@ import { toast } from "sonner";
 export default function TelegramLinkDialog({ open, onOpenChange, allowSkip = true }) {
   const { user, verifyTelegramCode, recheckChannels, missingChannels } = useAuth();
   const [botUsername, setBotUsername] = useState("");
+  const [stats, setStats] = useState(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   // Stage derived from auth state
@@ -26,6 +27,13 @@ export default function TelegramLinkDialog({ open, onOpenChange, allowSkip = tru
   useEffect(() => {
     api.get("/config").then((r) => setBotUsername(r.data.telegram_bot_username || "")).catch(() => {});
   }, []);
+
+  // Fetch community counter when the link stage is active
+  useEffect(() => {
+    if (open && stage === "link") {
+      api.get("/stats/community").then((r) => setStats(r.data)).catch(() => {});
+    }
+  }, [open, stage]);
 
   // Auto-close once everything is done
   useEffect(() => {
@@ -107,6 +115,22 @@ export default function TelegramLinkDialog({ open, onOpenChange, allowSkip = tru
 
         {stage === "link" && (
           <>
+            {stats && stats.next_position && (
+              <div
+                className="border border-[#53FC18]/30 bg-gradient-to-r from-[#53FC18]/10 to-transparent p-3 rounded-none"
+                data-testid="tg-link-community-counter"
+              >
+                <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-[#53FC18] mb-1">Arenada</div>
+                <div className="font-display font-black text-lg leading-tight">
+                  Telegram'ı bağlayan{" "}
+                  <span className="text-[#53FC18] text-2xl">#{stats.telegram_linked + 1}</span>'inci<br />
+                  kişi sen ol.
+                </div>
+                <div className="text-[11px] text-zinc-500 mt-1">
+                  Şu an {stats.total_members} kayıtlı, {stats.telegram_linked} aktif üye.
+                </div>
+              </div>
+            )}
             <div className="border border-[#53FC18]/20 bg-[#53FC18]/5 p-3 flex gap-2 text-xs text-zinc-300 rounded-none">
               <ShieldCheck className="w-4 h-4 text-[#53FC18] flex-shrink-0 mt-0.5" />
               <span>Profil/telefon paylaşımı yok. Bota /start yazıp aldığın kodu buraya yapıştır.</span>
