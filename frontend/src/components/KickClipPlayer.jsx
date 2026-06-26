@@ -1,81 +1,33 @@
 import React, { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { Play, Loader2, AlertTriangle, RotateCcw } from "lucide-react";
+import { Play, Loader2, AlertTriangle } from "lucide-react";
 import { api } from "../lib/api";
 
-// Kick's iframe parent parameter MUST be the FRONT-END domain (what the user
-// sees in their browser address bar), NOT the backend API domain. In a real
-// browser `window.location.hostname` is always correct; the env override +
-// hardcoded fallback exist only for SSR / jsdom / mis-configured dev setups
-// where window is unavailable or returns localhost.
-const HARDCODED_FRONTEND_DOMAIN = "clips-auth-phase3.preview.emergentagent.com";
-
-const FRONTEND_HOSTNAME_FALLBACK = (() => {
-  try {
-    const envUrl = process.env.REACT_APP_FRONTEND_URL;
-    if (envUrl) {
-      const h = new URL(envUrl).hostname.toLowerCase();
-      if (h && h !== "localhost" && h !== "127.0.0.1") return h;
-    }
-  } catch {
-    /* ignore */
-  }
-  return HARDCODED_FRONTEND_DOMAIN;
-})();
-
-function getCleanDomain() {
-  try {
-    if (typeof window !== "undefined" && window.location && window.location.hostname) {
-      const hostname = window.location.hostname.toLowerCase().replace(/:\d+$/, "");
-      if (hostname && hostname !== "localhost" && hostname !== "127.0.0.1") {
-        return hostname;
-      }
-    }
-  } catch (e) {
-    console.error("Failed to parse hostname, using fallback domain", e);
-  }
-  return FRONTEND_HOSTNAME_FALLBACK;
-}
-
 /**
- * In-page Kick clip player with two strategies:
- *   1) PRIMARY: Kick's official iframe embed
- *      https://player.kick.com/embed/clips/<clip_id>?parent=<host>
- *      Works on most user browsers — Kick honours the `parent` handshake.
- *   2) FALLBACK: Native HLS playback via hls.js using the CloudFront CDN
- *      https://clips.kick.com/clips/<shard>/<clip_id>/playlist.m3u8
- *      No iframe, no X-Frame-Options issues, no codec lock-in.
+ * In-page Kick clip player.
  *
- * If the iframe fails to emit a `load` event in time OR the user explicitly
- * clicks the "Yedek oynatıcı" link, we swap to HLS. The user never leaves the
- * page either way.
+ * Strategy: native HLS playback via hls.js streaming Kick's CloudFront CDN:
+ *   https://clips.kick.com/clips/<shard>/<clip_id>/playlist.m3u8
+ *
+ * Why not iframe `player.kick.com/embed/clips/...`?
+ *   - Kick has no officially documented clip-embed endpoint (confirmed at
+ *     docs.kick.com — only the live-stream channel embed is supported).
+ *   - The unofficial `player.kick.com/embed/clips/<id>?parent=<host>` URL is
+ *     locked behind Cloudflare bot/IP protection (`Request blocked by security
+ *     policy`) and `X-Frame-Options: SAMEORIGIN` — the `parent` handshake is
+ *     irrelevant.
+ *   - clips.kick.com is on CloudFront with wide-open CORS (`*`), zero bot
+ *     protection, and exposes the HLS manifest directly. This is the same
+ *     pipeline kicklogz.com uses.
+ *
+ * Shard discovery: a clip's CDN shard (e.g. `7a`, `d5`) is a 2-char hex bucket
+ * not derivable from the clip_id. Backend brute-forces 256 hex shards in
+ * parallel at clip-submission time and caches the result on the clip document.
+ * Older clips are backfilled lazily via POST /api/clips/<id>/resolve-shard the
+ * first time someone hits play.
  */
 export default function KickClipPlayer({ clip, autoPlay = false }) {
   const [active, setActive] = useState(autoPlay);
-  // Strategy: 'iframe' (try Kick official first) → 'hls' (fallback)
-  const [strategy, setStrategy] = useState("iframe");
-  const [iframeLoaded, setIframeLoaded] = useState(false);
-
-  const cleanClipId = clip?.kick_clip_id?.startsWith("clip_")
-    ? clip.kick_clip_id
-    : `clip_${clip?.kick_clip_id || ""}`;
-  // Kick's parent handshake is strict: lower-case bare hostname, no protocol,
-  // no port, NOT URL-encoded. Anything else triggers
-  // "This embed seems to be misconfigured". We fall back to the production
-  // domain (derived from REACT_APP_BACKEND_URL) if window.location.hostname
-  // is empty/localhost (SSR, jsdom, dev server, etc.) so the `parent` param
-  // is never empty.
-  const cleanDomain = getCleanDomain();
-  const iframeUrl = `https://player.kick.com/embed/clips/${cleanClipId}?parent=${cleanDomain}`;
-
-  // If iframe doesn't load within ~5s, assume Kick blocked it and switch to HLS.
-  useEffect(() => {
-    if (!active || strategy !== "iframe") return;
-    const t = setTimeout(() => {
-      if (!iframeLoaded) setStrategy("hls");
-    }, 5000);
-    return () => clearTimeout(t);
-  }, [active, strategy, iframeLoaded]);
 
   if (!active) {
     return (
@@ -98,39 +50,6 @@ export default function KickClipPlayer({ clip, autoPlay = false }) {
           Kick Klip
         </div>
       </button>
-    );
-  }
-
-  if (strategy === "iframe") {
-    return (
-      <>
-        <iframe
-          src={iframeUrl}
-          className="w-full h-full"
-          title={clip.title}
-          allow="autoplay; fullscreen; picture-in-picture"
-          allowFullScreen
-          scrolling="no"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation"
-          onLoad={() => setIframeLoaded(true)}
-          onError={() => setStrategy("hls")}
-          data-testid={`clip-iframe-${clip.id}`}
-        />
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            setStrategy("hls");
-          }}
-          className="absolute bottom-2 right-2 z-10 px-2 py-1 rounded bg-black/70 backdrop-blur-md text-[10px] font-mono uppercase tracking-wider text-zinc-300 hover:text-[#53FC18] border border-white/10 hover:border-[#53FC18]/40 inline-flex items-center gap-1"
-          data-testid={`clip-switch-hls-${clip.id}`}
-          aria-label="Yedek oynatıcıya geç"
-        >
-          <RotateCcw className="w-3 h-3" />
-          Yedek
-        </button>
-      </>
     );
   }
 
@@ -178,6 +97,7 @@ function HlsPlayer({ clip }) {
     if (!video) return;
     setError(null);
 
+    // Safari plays HLS natively
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = playlistUrl;
       const onErr = () => setError("Video oynatılamadı.");
