@@ -32,11 +32,17 @@ export default function ContestManager() {
     setLoading(true);
     try {
       const r = await api.get("/admin/contests");
-      setItems(r.data.items || []);
+      const data = r.data.items || [];
+      setItems(data);
+      // Auto-expand the latest contest so the "Kazanan Seç" UI is visible
+      // without an extra click.
+      if (data.length > 0 && activeContestId === null) {
+        setActiveContestId(data[0].id);
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeContestId]);
 
   useEffect(() => {
     refresh();
@@ -279,8 +285,8 @@ function ContestDetail({ contest, onChanged }) {
     <div className="border-t border-white/10 p-4 space-y-4">
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-[10px] font-mono uppercase tracking-[0.22em] text-zinc-500">
-            En Çok Oy Alan Klipler
+          <h4 className="text-[10px] font-mono uppercase tracking-[0.22em] text-[#FFD166]">
+            🏆 Kazanan Klibi Seç (en çok oy alanlar)
           </h4>
           <button
             type="button"

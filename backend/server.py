@@ -385,6 +385,13 @@ async def get_current_user(
 async def require_user(user: Optional[User] = Depends(get_current_user)) -> User:
     if user is None:
         raise HTTPException(status_code=401, detail="Giriş yapmalısın")
+    # Reject banned accounts on every authenticated request
+    fresh = await db.users.find_one({"id": user.id}, {"_id": 0, "banned": 1, "banned_reason": 1})
+    if fresh and fresh.get("banned"):
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "banned", "reason": fresh.get("banned_reason") or "Hesabın askıya alındı"},
+        )
     return user
 
 
@@ -1757,6 +1764,61 @@ async def admin_get_user(user_id: str, admin: User = Depends(require_admin)):
     u["recent_clips"] = clips
     u["recent_events"] = events
     return u
+
+
+class BanRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+@api_router.post("/admin/users/{user_id}/ban")
+async def admin_ban_user(user_id: str, payload: BanRequest, admin: User = Depends(require_admin)):
+    target = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    if target.get("username", "").lower() in ADMIN_USERNAMES:
+        raise HTTPException(status_code=400, detail="Admin yasaklanamaz")
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {
+            "banned": True,
+            "banned_at": now_iso(),
+            "banned_reason": (payload.reason or "").strip()[:200] or None,
+            "banned_by": admin.username,
+        }},
+    )
+    return {"ok": True}
+
+
+@api_router.post("/admin/users/{user_id}/unban")
+async def admin_unban_user(user_id: str, admin: User = Depends(require_admin)):
+    res = await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"banned": False}, "$unset": {"banned_at": "", "banned_reason": "", "banned_by": ""}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    return {"ok": True}
+
+
+@api_router.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, admin: User = Depends(require_admin)):
+    target = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    if target.get("username", "").lower() in ADMIN_USERNAMES:
+        raise HTTPException(status_code=400, detail="Admin silinemez")
+    # Cascade: clips by user, votes, reactions, notifications, reports
+    clip_ids = [c["id"] async for c in db.clips.find({"submitter_id": user_id}, {"_id": 0, "id": 1})]
+    if clip_ids:
+        await db.clips.delete_many({"id": {"$in": clip_ids}})
+        await db.votes.delete_many({"clip_id": {"$in": clip_ids}})
+        await db.reports.delete_many({"clip_id": {"$in": clip_ids}})
+    await db.votes.delete_many({"user_id": user_id})
+    await db.notifications.delete_many({"user_id": user_id})
+    await db.reports.delete_many({"reporter_id": user_id})
+    await db.events.delete_many({"user_id": user_id})
+    await db.users.delete_one({"id": user_id})
+    return {"ok": True, "deleted_clips": len(clip_ids)}
 
 
 @api_router.post("/admin/reports/{report_id}/resolve")

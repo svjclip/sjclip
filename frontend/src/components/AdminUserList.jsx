@@ -111,7 +111,7 @@ export default function AdminUserList() {
               >
                 <td className="px-2 py-3 font-mono">
                   <div className="flex items-center gap-2">
-                    <span className="text-white">{u.username}</span>
+                    <span className={u.banned ? "text-zinc-500 line-through" : "text-white"}>{u.username}</span>
                     {u.is_admin && (
                       <span
                         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#FFD166]/15 border border-[#FFD166]/30 text-[9px] uppercase tracking-wider text-[#FFD166]"
@@ -119,6 +119,14 @@ export default function AdminUserList() {
                       >
                         <ShieldCheck className="w-3 h-3" />
                         admin
+                      </span>
+                    )}
+                    {u.banned && (
+                      <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/15 border border-red-500/40 text-[9px] uppercase tracking-wider text-red-400"
+                        title="Yasaklı"
+                      >
+                        yasaklı
                       </span>
                     )}
                   </div>
@@ -179,6 +187,7 @@ export default function AdminUserList() {
         userId={selectedId}
         open={!!selectedId}
         onClose={() => setSelectedId(null)}
+        onUserChanged={() => load(page, search)}
       />
     </section>
   );

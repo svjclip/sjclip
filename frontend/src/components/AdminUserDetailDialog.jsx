@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
-import { api } from "../lib/api";
+import { api, formatApiError } from "../lib/api";
+import { toast } from "sonner";
 import {
   ShieldCheck,
   Send,
@@ -12,6 +13,10 @@ import {
   Flag,
   AlertOctagon,
   ExternalLink,
+  Ban,
+  Trash2,
+  UserX,
+  UserCheck,
 } from "lucide-react";
 
 /**
@@ -19,34 +24,91 @@ import {
  * AdminUserList. Surfaces telegram username/id, contact details, activity
  * counters and recent clips/events.
  */
-export default function AdminUserDetailDialog({ userId, open, onClose }) {
+export default function AdminUserDetailDialog({ userId, open, onClose, onUserChanged }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    if (!userId) return;
+    setLoading(true);
+    setUser(null);
+    return api
+      .get(`/admin/users/${userId}`)
+      .then((r) => setUser(r.data))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     if (!userId || !open) return;
-    let cancelled = false;
-    setLoading(true);
-    setUser(null);
-    api
-      .get(`/admin/users/${userId}`)
-      .then((r) => {
-        if (!cancelled) setUser(r.data);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    load();
   }, [userId, open]);
+
+  const ban = async () => {
+    const reason = window.prompt("Yasaklama sebebi (opsiyonel):", "") || "";
+    if (!window.confirm("Bu kullanıcıyı yasaklamak istediğine emin misin?")) return;
+    setBusy(true);
+    try {
+      await api.post(`/admin/users/${user.id}/ban`, { reason });
+      toast.success("Kullanıcı yasaklandı");
+      await load();
+      onUserChanged?.();
+    } catch (err) {
+      toast.error(formatApiError(err?.response?.data?.detail, "İşlem başarısız"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unban = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/admin/users/${user.id}/unban`);
+      toast.success("Yasak kaldırıldı");
+      await load();
+      onUserChanged?.();
+    } catch (err) {
+      toast.error(formatApiError(err?.response?.data?.detail, "İşlem başarısız"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeUser = async () => {
+    if (!window.confirm(
+      `${user.username} kullanıcısını ve TÜM kliplerini/oylarını kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`
+    )) return;
+    setBusy(true);
+    try {
+      const r = await api.delete(`/admin/users/${user.id}`);
+      toast.success(`Kullanıcı silindi (${r.data.deleted_clips || 0} klip dahil)`);
+      onUserChanged?.();
+      onClose();
+    } catch (err) {
+      toast.error(formatApiError(err?.response?.data?.detail, "Silme başarısız"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteClip = async (clipId, title) => {
+    if (!window.confirm(`"${title}" klibini silmek istediğine emin misin?`)) return;
+    try {
+      await api.delete(`/clips/${clipId}`);
+      toast.success("Klip silindi");
+      await load();
+      onUserChanged?.();
+    } catch (err) {
+      toast.error(formatApiError(err?.response?.data?.detail, "Silinemedi"));
+    }
+  };
 
   const fmt = (s) => (s ? new Date(s).toLocaleString("tr-TR") : "—");
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
-        className="max-w-2xl bg-black border border-[#53FC18]/30 text-white rounded-none p-0"
+        className="max-w-2xl bg-black border border-[#53FC18]/30 text-white rounded-none p-0 max-h-[90vh] overflow-y-auto"
         data-testid="admin-user-detail-dialog"
       >
         <DialogTitle className="sr-only">Kullanıcı Detayı</DialogTitle>
@@ -76,10 +138,59 @@ export default function AdminUserDetailDialog({ userId, open, onClose }) {
                         <ShieldCheck className="w-3 h-3" /> admin
                       </span>
                     )}
+                    {user.banned && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-500/15 border border-red-500/40 text-[10px] uppercase tracking-wider text-red-400">
+                        <Ban className="w-3 h-3" /> yasaklı
+                      </span>
+                    )}
                   </div>
                   <div className="text-[11px] font-mono text-zinc-500 mt-1 truncate">{user.id}</div>
+                  {user.banned && user.banned_reason && (
+                    <div className="text-xs text-red-400/80 mt-1.5 italic">
+                      Sebep: {user.banned_reason}
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Admin actions */}
+              {!user.is_admin && (
+                <div className="flex flex-wrap items-center gap-2 mt-4" data-testid="admin-user-actions">
+                  {user.banned ? (
+                    <button
+                      type="button"
+                      onClick={unban}
+                      disabled={busy}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs uppercase tracking-wider border border-[#53FC18]/40 text-[#53FC18] hover:bg-[#53FC18]/10 transition-colors disabled:opacity-50"
+                      data-testid="admin-user-unban-btn"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      Yasağı Kaldır
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={ban}
+                      disabled={busy}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs uppercase tracking-wider border border-[#FFD166]/40 text-[#FFD166] hover:bg-[#FFD166]/10 transition-colors disabled:opacity-50"
+                      data-testid="admin-user-ban-btn"
+                    >
+                      <UserX className="w-3.5 h-3.5" />
+                      Yasakla
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={removeUser}
+                    disabled={busy}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs uppercase tracking-wider border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50 ml-auto"
+                    data-testid="admin-user-delete-btn"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Kullanıcıyı Sil
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Contact + Telegram */}
@@ -143,13 +254,22 @@ export default function AdminUserDetailDialog({ userId, open, onClose }) {
                     >
                       <a
                         href={`/clip/${c.id}`}
-                        className="truncate text-zinc-300 hover:text-[#53FC18]"
+                        className="truncate text-zinc-300 hover:text-[#53FC18] flex-1"
                       >
                         {c.title}
                       </a>
                       <span className="text-[10px] font-mono text-zinc-500 flex-shrink-0">
                         {fmt(c.created_at)}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => deleteClip(c.id, c.title)}
+                        className="p-1 text-zinc-500 hover:text-red-400 transition-colors flex-shrink-0"
+                        aria-label="Klibi sil"
+                        data-testid={`admin-delete-clip-${c.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </li>
                   ))}
                 </ul>
