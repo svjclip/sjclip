@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronUp, ExternalLink, Play, Flag, Check } from "lucide-react";
+import { ChevronUp, ExternalLink, Play, Flag, Check, Flame, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api, kickEmbedUrl, formatApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import ChannelGateDialog from "./ChannelGateDialog";
 import ReportClipDialog from "./ReportClipDialog";
 
-export default function ClipCard({ clip, rank }) {
+export default function ClipCard({ clip, rank, onDeleted }) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [playing, setPlaying] = useState(false);
@@ -20,6 +20,48 @@ export default function ClipCard({ clip, rank }) {
   const [reportOpen, setReportOpen] = useState(false);
   const [missing, setMissing] = useState([]);
   const [showVotedFlash, setShowVotedFlash] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const hoverTimer = useRef(null);
+
+  const isOwner = user && user.username === clip.submitter_username;
+  const isAdmin = user && user.is_admin;
+  const canDelete = isOwner || isAdmin;
+
+  const handleMouseEnter = () => {
+    if (playing) return;
+    // 800ms hover → auto-play preview
+    hoverTimer.current = setTimeout(() => setPlaying(true), 800);
+  };
+  const handleMouseLeave = () => {
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+  };
+
+  const handleDelete = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      setTimeout(() => setConfirmDelete(false), 2500);
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.delete(`/clips/${clip.id}`);
+      toast.success("Klip silindi");
+      qc.invalidateQueries({ queryKey: ["clips"] });
+      qc.invalidateQueries({ queryKey: ["leaderboard"] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+      if (onDeleted) onDeleted(clip.id);
+    } catch (err) {
+      toast.error(formatApiError(err?.response?.data?.detail, "Silinemedi"));
+    } finally {
+      setBusy(false);
+      setConfirmDelete(false);
+    }
+  };
 
   const toggleVote = async (e) => {
     e.preventDefault();
@@ -82,6 +124,8 @@ export default function ClipCard({ clip, rank }) {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.5 }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       className="group relative rounded-2xl bg-[#0A0A0A] border border-white/5 overflow-hidden hover:border-[#53FC18]/30 hover:shadow-[0_0_30px_rgba(83,252,24,0.12)] transition-all duration-300"
       data-testid={`clip-card-${clip.id}`}
     >
@@ -91,10 +135,48 @@ export default function ClipCard({ clip, rank }) {
         </div>
       )}
 
+      {/* Hot/viral badge — recent vote velocity */}
+      {clip.is_hot && (
+        <motion.div
+          initial={{ scale: 0, rotate: -15 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 14 }}
+          className="absolute top-3 right-3 z-10 px-2 py-1 rounded-md bg-gradient-to-r from-[#FF4E16] to-[#FF8A1A] border border-[#FFAE5E] font-mono text-[10px] font-bold text-white flex items-center gap-1 shadow-[0_0_20px_rgba(255,78,22,0.55)]"
+          data-testid={`hot-badge-${clip.id}`}
+        >
+          <motion.span
+            animate={{ rotate: [0, -8, 8, 0], scale: [1, 1.1, 1.1, 1] }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <Flame className="w-3 h-3" />
+          </motion.span>
+          <span>+{clip.votes_last_hour} / 1sa</span>
+        </motion.div>
+      )}
+
+      {/* Delete button — only for owner or admin */}
+      {canDelete && (
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={busy}
+          className={`absolute z-10 px-2 py-1 rounded-md backdrop-blur-md font-mono text-[10px] font-bold flex items-center gap-1 transition-all ${
+            confirmDelete
+              ? "bg-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)]"
+              : "bg-black/60 text-zinc-400 hover:text-red-400 border border-white/10 hover:border-red-500/50"
+          } ${clip.is_hot ? "top-12 right-3" : "top-3 right-3"}`}
+          aria-label={confirmDelete ? "Onay için tekrar tıkla" : "Klibi sil"}
+          data-testid={`delete-clip-btn-${clip.id}`}
+        >
+          <Trash2 className="w-3 h-3" />
+          <span>{confirmDelete ? "Emin misin?" : "Sil"}</span>
+        </button>
+      )}
+
       <div className="relative aspect-video bg-black overflow-hidden">
         {playing ? (
           <iframe
-            src={kickEmbedUrl(clip.kick_clip_id)}
+            src={kickEmbedUrl(clip.kick_clip_id) + "?muted=true"}
             className="w-full h-full"
             allow="autoplay; fullscreen"
             allowFullScreen

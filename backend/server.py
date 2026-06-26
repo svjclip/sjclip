@@ -45,6 +45,10 @@ ALLOWED_KICK_STREAMER = os.environ.get('ALLOWED_KICK_STREAMER', 'slotjack').lowe
 # So every real signup adds COMMUNITY_DISPLAY_MULTIPLIER to the visible counter
 # in a stable, deterministic way (1 real → 4 shown, 2 real → 8 shown, ...).
 COMMUNITY_DISPLAY_MULTIPLIER = int(os.environ.get('COMMUNITY_DISPLAY_MULTIPLIER', '4'))
+# Admin users (comma-separated usernames). Empty by default = no admins.
+ADMIN_USERNAMES = {u.strip().lower() for u in os.environ.get('ADMIN_USERNAMES', '').split(',') if u.strip()}
+# Flame badge threshold: clips with this many votes in the last hour get a "hot" flag.
+FLAME_VOTES_THRESHOLD = int(os.environ.get('FLAME_VOTES_THRESHOLD', '3'))
 
 app = FastAPI(title=f"{STREAMER_NAME} Clip Voting API")
 api_router = APIRouter(prefix="/api")
@@ -149,6 +153,8 @@ class ClipPublic(BaseModel):
     week_key: str
     created_at: str
     has_voted: bool = False
+    votes_last_hour: int = 0
+    is_hot: bool = False
 
 
 # ----------------- Helpers -----------------
@@ -284,12 +290,43 @@ async def require_user(user: Optional[User] = Depends(get_current_user)) -> User
     return user
 
 
-async def attach_vote_status(clip_dict: dict, user_id: Optional[str]) -> ClipPublic:
+async def attach_vote_status(clip_dict: dict, user_id: Optional[str], hot_map: Optional[Dict[str, int]] = None) -> ClipPublic:
     has_voted = False
     if user_id:
         v = await db.votes.find_one({"clip_id": clip_dict["id"], "user_id": user_id})
         has_voted = v is not None
-    return ClipPublic(**clip_dict, has_voted=has_voted)
+    last_hour = (hot_map or {}).get(clip_dict["id"], 0)
+    return ClipPublic(
+        **clip_dict,
+        has_voted=has_voted,
+        votes_last_hour=last_hour,
+        is_hot=last_hour >= FLAME_VOTES_THRESHOLD,
+    )
+
+
+async def compute_hot_map(clip_ids: List[str]) -> Dict[str, int]:
+    """Single aggregation: count votes per clip in the last hour."""
+    if not clip_ids:
+        return {}
+    hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    pipeline = [
+        {"$match": {"clip_id": {"$in": clip_ids}, "created_at": {"$gte": hour_ago}}},
+        {"$group": {"_id": "$clip_id", "c": {"$sum": 1}}},
+    ]
+    out: Dict[str, int] = {}
+    async for row in db.votes.aggregate(pipeline):
+        out[row["_id"]] = row["c"]
+    return out
+
+
+def is_admin(user: Optional[User]) -> bool:
+    return bool(user and user.username and user.username.lower() in ADMIN_USERNAMES)
+
+
+async def require_admin(user: User = Depends(require_user)) -> User:
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="Yetkin yok")
+    return user
 
 
 # ----------------- Routes -----------------
@@ -844,6 +881,7 @@ async def me(user: Optional[User] = Depends(get_current_user)):
             missing = []
     pub["missing_channels"] = missing
     pub["needs_password_setup"] = not bool(doc.get("password_hash"))
+    pub["is_admin"] = is_admin(User(**doc))
     return pub
 
 
@@ -894,7 +932,8 @@ async def list_clips(
     cursor = db.clips.find(query, {"_id": 0}).sort(sort_field).limit(100)
     docs = await cursor.to_list(100)
     uid = user.id if user else None
-    return [await attach_vote_status(d, uid) for d in docs]
+    hot_map = await compute_hot_map([d["id"] for d in docs])
+    return [await attach_vote_status(d, uid, hot_map) for d in docs]
 
 
 @api_router.get("/clips/{clip_id}", response_model=ClipPublic)
@@ -903,7 +942,26 @@ async def get_clip(clip_id: str, user: Optional[User] = Depends(get_current_user
     if not doc:
         raise HTTPException(status_code=404, detail="Clip not found")
     uid = user.id if user else None
-    return await attach_vote_status(doc, uid)
+    hot_map = await compute_hot_map([doc["id"]])
+    return await attach_vote_status(doc, uid, hot_map)
+
+
+@api_router.delete("/clips/{clip_id}")
+async def delete_clip(clip_id: str, user: User = Depends(require_user)):
+    """Owner or admin can delete a clip. Cascades to votes + reports."""
+    doc = await db.clips.find_one({"id": clip_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Klip bulunamadı")
+    if doc.get("submitter_id") != user.id and not is_admin(user):
+        raise HTTPException(status_code=403, detail="Sadece klibin sahibi veya yöneticiler silebilir")
+    await db.clips.delete_one({"id": clip_id})
+    await db.votes.delete_many({"clip_id": clip_id})
+    # Auto-resolve any open reports for this clip
+    await db.reports.update_many(
+        {"clip_id": clip_id, "status": "open"},
+        {"$set": {"status": "resolved", "resolution": "clip_deleted", "resolved_at": now_iso(), "resolved_by": user.id}},
+    )
+    return {"ok": True}
 
 
 @api_router.post("/clips/{clip_id}/vote", response_model=ClipPublic)
@@ -980,7 +1038,8 @@ async def weekly_leaderboard(user: Optional[User] = Depends(get_current_user)):
     cursor = db.clips.find({"week_key": week}, {"_id": 0}).sort([("votes_count", -1), ("created_at", 1)]).limit(20)
     docs = await cursor.to_list(20)
     uid = user.id if user else None
-    return [await attach_vote_status(d, uid) for d in docs]
+    hot_map = await compute_hot_map([d["id"] for d in docs])
+    return [await attach_vote_status(d, uid, hot_map) for d in docs]
 
 
 # ----------------- Stats / Profile / Reports -----------------
@@ -1011,7 +1070,8 @@ async def user_profile(username: str, viewer: Optional[User] = Depends(get_curre
     clip_cursor = db.clips.find({"submitter_id": doc["id"]}, {"_id": 0}).sort([("created_at", -1)]).limit(100)
     clips_raw = await clip_cursor.to_list(100)
     uid = viewer.id if viewer else None
-    clips = [await attach_vote_status(c, uid) for c in clips_raw]
+    hot_map = await compute_hot_map([c["id"] for c in clips_raw])
+    clips = [await attach_vote_status(c, uid, hot_map) for c in clips_raw]
     total_votes_received = sum(c.votes_count for c in clips)
     return {
         "user": {
@@ -1054,6 +1114,69 @@ async def report_clip(clip_id: str, payload: ReportClipRequest, user: User = Dep
         "status": "open",
         "created_at": now_iso(),
     })
+    return {"ok": True}
+
+
+# ----------------- Admin endpoints (env-gated) -----------------
+class ResolveReportRequest(BaseModel):
+    action: str  # "ignore" | "delete_clip"
+
+
+@api_router.get("/admin/reports")
+async def admin_list_reports(status: str = "open", admin: User = Depends(require_admin)):
+    """List reports with status filter. Joins clip + reporter info."""
+    if status not in ("open", "resolved", "all"):
+        raise HTTPException(status_code=400, detail="status: open | resolved | all")
+    q = {} if status == "all" else {"status": status}
+    cursor = db.reports.find(q, {"_id": 0}).sort([("created_at", -1)]).limit(200)
+    rows = await cursor.to_list(200)
+    # Attach clip snapshot for each report (cheap, max 200)
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        clip = await db.clips.find_one({"id": r["clip_id"]}, {"_id": 0, "id": 1, "title": 1, "kick_url": 1, "kick_clip_id": 1, "submitter_username": 1, "votes_count": 1})
+        out.append({**r, "clip": clip})
+    return {"reports": out, "count": len(out)}
+
+
+@api_router.get("/admin/stats")
+async def admin_stats(admin: User = Depends(require_admin)):
+    """Real (non-inflated) counts — only admins."""
+    return {
+        "users_total": await db.users.count_documents({}),
+        "users_with_telegram": await db.users.count_documents({"telegram_id": {"$type": "string"}}),
+        "clips_total": await db.clips.count_documents({}),
+        "clips_this_week": await db.clips.count_documents({"week_key": current_week_key()}),
+        "votes_total": await db.votes.count_documents({}),
+        "reports_open": await db.reports.count_documents({"status": "open"}),
+        "reports_resolved": await db.reports.count_documents({"status": "resolved"}),
+    }
+
+
+@api_router.post("/admin/reports/{report_id}/resolve")
+async def admin_resolve_report(report_id: str, payload: ResolveReportRequest, admin: User = Depends(require_admin)):
+    if payload.action not in ("ignore", "delete_clip"):
+        raise HTTPException(status_code=400, detail="action: 'ignore' veya 'delete_clip' olmalı")
+    report = await db.reports.find_one({"id": report_id}, {"_id": 0})
+    if not report:
+        raise HTTPException(status_code=404, detail="Rapor bulunamadı")
+    if report.get("status") != "open":
+        raise HTTPException(status_code=400, detail="Bu rapor zaten kapatılmış")
+    update = {
+        "status": "resolved",
+        "resolution": payload.action,
+        "resolved_at": now_iso(),
+        "resolved_by": admin.id,
+    }
+    if payload.action == "delete_clip":
+        clip_id = report["clip_id"]
+        await db.clips.delete_one({"id": clip_id})
+        await db.votes.delete_many({"clip_id": clip_id})
+        # Also resolve any other open reports against the same clip
+        await db.reports.update_many(
+            {"clip_id": clip_id, "status": "open", "id": {"$ne": report_id}},
+            {"$set": {"status": "resolved", "resolution": "clip_deleted_by_admin", "resolved_at": now_iso(), "resolved_by": admin.id}},
+        )
+    await db.reports.update_one({"id": report_id}, {"$set": update})
     return {"ok": True}
 
 

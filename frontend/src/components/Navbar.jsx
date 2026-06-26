@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Trophy, Plus, Zap, LogOut, Send, Link2 } from "lucide-react";
+import { Trophy, Plus, Zap, LogOut, Send, Link2, ShieldCheck } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { Button } from "./ui/button";
 import LoginDialog from "./LoginDialog";
@@ -46,6 +46,11 @@ export default function Navbar({ streamerName }) {
             <NavLink to="/leaderboard" className={linkClass} data-testid="nav-leaderboard">
               <span className="inline-flex items-center gap-1.5"><Trophy className="w-4 h-4" />Sıralama</span>
             </NavLink>
+            {user?.is_admin && (
+              <NavLink to="/admin" className={linkClass} data-testid="nav-admin">
+                <span className="inline-flex items-center gap-1.5"><ShieldCheck className="w-4 h-4" />Admin</span>
+              </NavLink>
+            )}
           </div>
 
           <div className="flex items-center gap-3">

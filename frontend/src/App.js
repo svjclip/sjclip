@@ -10,6 +10,7 @@ import HomePage from "./pages/HomePage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import ClipDetailPage from "./pages/ClipDetailPage";
 import ProfilePage from "./pages/ProfilePage";
+import AdminPage from "./pages/AdminPage";
 import SetPasswordDialog from "./components/SetPasswordDialog";
 import TelegramLinkDialog from "./components/TelegramLinkDialog";
 
@@ -50,6 +51,7 @@ function AppShell() {
             <Route path="/leaderboard" element={<LeaderboardPage />} />
             <Route path="/clip/:id" element={<ClipDetailPage />} />
             <Route path="/profil/:username" element={<ProfilePage />} />
+            <Route path="/admin" element={<AdminPage />} />
           </Routes>
         </main>
         <Footer streamerName={streamerName} />
