@@ -169,6 +169,45 @@ class ReactionRequest(BaseModel):
     emoji: str
 
 
+# ----------------- Contest models -----------------
+class Contest(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    starts_at: str  # ISO 8601 UTC
+    ends_at: str    # ISO 8601 UTC
+    winner_clip_id: Optional[str] = None
+    winner_announced_at: Optional[str] = None
+    created_at: str = Field(default_factory=now_iso)
+    created_by: Optional[str] = None
+
+
+class ContestCreate(BaseModel):
+    name: str
+    starts_at: str
+    ends_at: str
+
+
+class ContestUpdate(BaseModel):
+    name: Optional[str] = None
+    starts_at: Optional[str] = None
+    ends_at: Optional[str] = None
+
+
+class WinnerRequest(BaseModel):
+    clip_id: str
+
+
+class Notification(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    type: str
+    title: str
+    message: str
+    link: Optional[str] = None
+    read: bool = False
+    created_at: str = Field(default_factory=now_iso)
+
+
 # ----------------- Helpers -----------------
 # Only accept clips from the allowed Kick streamer (ALLOWED_KICK_STREAMER env var).
 # We do not parse arbitrary streamers — any other URL pattern returns (None, None).
@@ -1153,6 +1192,202 @@ async def delete_clip(clip_id: str, user: User = Depends(require_user)):
     return {"ok": True}
 
 
+# ----------------- Contest helpers -----------------
+def _parse_iso(s: str) -> datetime:
+    """Parse ISO 8601 string (with or without timezone) into UTC datetime."""
+    dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+async def get_active_contest() -> Optional[Dict[str, Any]]:
+    """Return the contest whose [starts_at, ends_at) window contains now (UTC).
+    If multiple overlap, the most recently created wins."""
+    now = datetime.now(timezone.utc).isoformat()
+    doc = await db.contests.find_one(
+        {"starts_at": {"$lte": now}, "ends_at": {"$gt": now}},
+        {"_id": 0},
+        sort=[("created_at", -1)],
+    )
+    return doc
+
+
+async def get_latest_contest() -> Optional[Dict[str, Any]]:
+    """Latest contest by created_at — used as "previous contest" when none active."""
+    return await db.contests.find_one({}, {"_id": 0}, sort=[("created_at", -1)])
+
+
+@api_router.get("/contests/active")
+async def public_active_contest():
+    """Public: returns the active contest + status. Status values:
+    - 'active'      : currently voting open
+    - 'ended'       : window closed, no new contest yet (votes blocked, banner shown)
+    - 'no_contest'  : no contest ever scheduled
+    If a winner clip is announced (either on the active or latest contest), it is
+    included so the homepage can show the "Bu Haftanın Kazananı" hero.
+    """
+    active = await get_active_contest()
+    latest = await get_latest_contest()
+    status_ = "no_contest"
+    contest = None
+    if active:
+        contest = active
+        status_ = "active"
+    elif latest:
+        contest = latest
+        status_ = "ended"
+    winner_clip = None
+    if contest and contest.get("winner_clip_id"):
+        c = await db.clips.find_one({"id": contest["winner_clip_id"]}, {"_id": 0})
+        if c:
+            winner_clip = await attach_vote_status(c, None)
+    return {
+        "status": status_,
+        "contest": contest,
+        "winner_clip": winner_clip.model_dump() if winner_clip else None,
+    }
+
+
+@api_router.get("/admin/contests")
+async def admin_list_contests(admin: User = Depends(require_admin)):
+    items = await db.contests.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(length=200)
+    return {"items": items}
+
+
+@api_router.post("/admin/contests")
+async def admin_create_contest(payload: ContestCreate, admin: User = Depends(require_admin)):
+    try:
+        starts = _parse_iso(payload.starts_at)
+        ends = _parse_iso(payload.ends_at)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Geçersiz tarih formatı")
+    if ends <= starts:
+        raise HTTPException(status_code=400, detail="Bitiş başlangıçtan sonra olmalı")
+    if not payload.name.strip():
+        raise HTTPException(status_code=400, detail="İsim boş olamaz")
+    c = Contest(
+        name=payload.name.strip()[:80],
+        starts_at=starts.isoformat(),
+        ends_at=ends.isoformat(),
+        created_by=admin.username,
+    )
+    await db.contests.insert_one(c.model_dump())
+    return c.model_dump()
+
+
+@api_router.put("/admin/contests/{contest_id}")
+async def admin_update_contest(contest_id: str, payload: ContestUpdate, admin: User = Depends(require_admin)):
+    doc = await db.contests.find_one({"id": contest_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Etkinlik bulunamadı")
+    update: Dict[str, Any] = {}
+    if payload.name is not None:
+        if not payload.name.strip():
+            raise HTTPException(status_code=400, detail="İsim boş olamaz")
+        update["name"] = payload.name.strip()[:80]
+    if payload.starts_at is not None:
+        try:
+            update["starts_at"] = _parse_iso(payload.starts_at).isoformat()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Geçersiz başlangıç tarihi")
+    if payload.ends_at is not None:
+        try:
+            update["ends_at"] = _parse_iso(payload.ends_at).isoformat()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Geçersiz bitiş tarihi")
+    starts = _parse_iso(update.get("starts_at", doc["starts_at"]))
+    ends = _parse_iso(update.get("ends_at", doc["ends_at"]))
+    if ends <= starts:
+        raise HTTPException(status_code=400, detail="Bitiş başlangıçtan sonra olmalı")
+    await db.contests.update_one({"id": contest_id}, {"$set": update})
+    doc = await db.contests.find_one({"id": contest_id}, {"_id": 0})
+    return doc
+
+
+@api_router.delete("/admin/contests/{contest_id}")
+async def admin_delete_contest(contest_id: str, admin: User = Depends(require_admin)):
+    res = await db.contests.delete_one({"id": contest_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Etkinlik bulunamadı")
+    return {"ok": True}
+
+
+@api_router.get("/admin/contests/{contest_id}/top-clips")
+async def admin_contest_top_clips(contest_id: str, limit: int = 20, admin: User = Depends(require_admin)):
+    """Top-voted clips overall. We don't filter by the contest's submission
+    window because (a) admins should be able to pick any meaningful clip as
+    the winner and (b) the contest window is enforced for voting, not
+    submission."""
+    doc = await db.contests.find_one({"id": contest_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Etkinlik bulunamadı")
+    limit = max(1, min(50, limit))
+    cursor = db.clips.find({}, {"_id": 0}).sort(
+        [("votes_count", -1), ("created_at", -1)]
+    ).limit(limit)
+    return {"items": await cursor.to_list(length=limit)}
+
+
+@api_router.post("/admin/contests/{contest_id}/winner")
+async def admin_set_winner(contest_id: str, payload: WinnerRequest, admin: User = Depends(require_admin)):
+    contest = await db.contests.find_one({"id": contest_id}, {"_id": 0})
+    if not contest:
+        raise HTTPException(status_code=404, detail="Etkinlik bulunamadı")
+    clip = await db.clips.find_one({"id": payload.clip_id}, {"_id": 0})
+    if not clip:
+        raise HTTPException(status_code=404, detail="Klip bulunamadı")
+    announced_at = now_iso()
+    await db.contests.update_one(
+        {"id": contest_id},
+        {"$set": {"winner_clip_id": payload.clip_id, "winner_announced_at": announced_at}},
+    )
+    # Broadcast notification to every registered user
+    user_ids = [u["id"] async for u in db.users.find({}, {"_id": 0, "id": 1})]
+    if user_ids:
+        notifs = [
+            Notification(
+                user_id=uid,
+                type="winner_announced",
+                title="Bu haftanın kazananı açıklandı!",
+                message=f"\"{clip.get('title','')}\" — @{clip.get('submitter_username','')} tarafından",
+                link=f"/clip/{payload.clip_id}",
+            ).model_dump()
+            for uid in user_ids
+        ]
+        await db.notifications.insert_many(notifs)
+    return {"ok": True, "winner_clip_id": payload.clip_id, "winner_announced_at": announced_at}
+
+
+# ----------------- Notifications -----------------
+@api_router.get("/notifications/me")
+async def my_notifications(unread_only: bool = False, user: User = Depends(require_user)):
+    q: Dict[str, Any] = {"user_id": user.id}
+    if unread_only:
+        q["read"] = False
+    items = await db.notifications.find(q, {"_id": 0}).sort([("created_at", -1)]).limit(50).to_list(length=50)
+    unread = await db.notifications.count_documents({"user_id": user.id, "read": False})
+    return {"items": items, "unread": unread}
+
+
+@api_router.post("/notifications/{notif_id}/read")
+async def mark_notification_read(notif_id: str, user: User = Depends(require_user)):
+    res = await db.notifications.update_one(
+        {"id": notif_id, "user_id": user.id}, {"$set": {"read": True}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Bildirim bulunamadı")
+    return {"ok": True}
+
+
+@api_router.post("/notifications/me/read-all")
+async def mark_all_notifications_read(user: User = Depends(require_user)):
+    await db.notifications.update_many(
+        {"user_id": user.id, "read": False}, {"$set": {"read": True}}
+    )
+    return {"ok": True}
+
+
 @api_router.post("/clips/{clip_id}/vote", response_model=ClipPublic)
 async def vote_clip(clip_id: str, user: User = Depends(require_user)):
     """Cast a vote. Hardened against:
@@ -1161,6 +1396,19 @@ async def vote_clip(clip_id: str, user: User = Depends(require_user)):
     - votes on past-week clips (only current week is voteable)
     - votes from accounts without Telegram + required channels
     """
+    # Contest gate: there must be an ACTIVE contest right now. Outside the
+    # configured window (or when no contest is scheduled) all new votes are
+    # rejected with HTTP 423 so the frontend can show the "Etkinlik kapalı"
+    # banner instead of the vote button.
+    active_contest = await get_active_contest()
+    if not active_contest:
+        raise HTTPException(
+            status_code=423,
+            detail={
+                "error": "contest_closed",
+                "message": "Etkinlik süresi doldu. Yeni etkinlik açılınca oy verebilirsin.",
+            },
+        )
     if REQUIRED_CHANNELS:
         if not user.telegram_id:
             raise HTTPException(status_code=403, detail={"error": "telegram_required", "missing_channels": REQUIRED_CHANNELS})

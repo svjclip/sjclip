@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "./ui/sheet";
 import LoginDialog from "./LoginDialog";
 import SubmitClipDialog from "./SubmitClipDialog";
 import AvatarPicker from "./AvatarPicker";
+import NotificationsBell from "./NotificationsBell";
 
 export default function Navbar({ streamerName }) {
   const { user, logout, missingChannels } = useAuth();
@@ -135,6 +136,7 @@ export default function Navbar({ streamerName }) {
           </div>
 
           <div className="flex items-center gap-3">
+            {user && <NotificationsBell />}
             {user ? (
               <>
                 {fullyOnboarded ? (

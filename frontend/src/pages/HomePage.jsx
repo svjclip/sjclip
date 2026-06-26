@@ -6,6 +6,7 @@ import Hero3D from "../components/Hero3D";
 import ClipCard from "../components/ClipCard";
 import HowItWorks from "../components/HowItWorks";
 import PrizeReveal from "../components/PrizeReveal";
+import ContestStatus from "../components/ContestStatus";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Button } from "../components/ui/button";
@@ -112,6 +113,7 @@ export default function HomePage({ streamerName }) {
       {/* TOP 3 — directly under hero so clips show above-the-fold on most screens */}
       {topThree.length > 0 && (
         <section className="relative max-w-7xl mx-auto px-6 lg:px-8 pt-12 pb-10" data-testid="top-three-section">
+          <ContestStatus />
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}

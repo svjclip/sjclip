@@ -7,6 +7,7 @@ import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import PrizeSettings from "../components/PrizeSettings";
+import ContestManager from "../components/ContestManager";
 import AdminUserList from "../components/AdminUserList";
 
 function StatTile({ icon: Icon, label, value, accent, testid }) {
@@ -97,6 +98,9 @@ export default function AdminPage() {
 
       {/* PRIZE SETTINGS */}
       <PrizeSettings />
+
+      {/* CONTEST MANAGER */}
+      <ContestManager />
 
       {/* USER LIST */}
       <AdminUserList />

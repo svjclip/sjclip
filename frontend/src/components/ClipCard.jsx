@@ -89,7 +89,9 @@ export default function ClipCard({ clip, rank, onDeleted }) {
       qc.invalidateQueries({ queryKey: ["leaderboard"] });
     } catch (err) {
       const detail = err?.response?.data?.detail;
-      if (detail && typeof detail === "object" && detail.missing_channels) {
+      if (detail && typeof detail === "object" && detail.error === "contest_closed") {
+        toast.error(detail.message || "Etkinlik kapalı. Yeni etkinlik açılınca oy verebilirsin.");
+      } else if (detail && typeof detail === "object" && detail.missing_channels) {
         setMissing(detail.missing_channels);
         setGateOpen(true);
       } else {
