@@ -391,7 +391,7 @@ async def telegram_auth(payload: TelegramAuthData, response: Response):
             avatar_url=payload.photo_url or f"https://api.dicebear.com/7.x/identicon/svg?seed={username}&backgroundColor=53FC18,0A0A0A",
         )
         try:
-            await db.users.insert_one(user_obj.model_dump())
+            await db.users.insert_one(user_obj.model_dump(exclude_none=True))
         except DuplicateKeyError:
             raise HTTPException(status_code=409, detail="Bu Telegram hesabı zaten başka bir kullanıcıya bağlı")
         user_doc = user_obj.model_dump()
@@ -556,7 +556,7 @@ async def verify_code(req: VerifyCodeRequest, response: Response, current: Optio
                 avatar_url=f"https://api.dicebear.com/7.x/identicon/svg?seed={username}&backgroundColor=53FC18,0A0A0A",
             )
             try:
-                await db.users.insert_one(user_obj.model_dump())
+                await db.users.insert_one(user_obj.model_dump(exclude_none=True))
             except DuplicateKeyError:
                 raise HTTPException(status_code=409, detail="Bu Telegram hesabı zaten başka bir kullanıcıya bağlı")
             user_doc = user_obj.model_dump()
@@ -651,7 +651,7 @@ async def mock_login(req: LoginRequest):
         return User(**existing)
     avatar = f"https://api.dicebear.com/7.x/identicon/svg?seed={username}&backgroundColor=53FC18,0A0A0A"
     user = User(username=username, avatar_url=avatar)
-    await db.users.insert_one(user.model_dump())
+    await db.users.insert_one(user.model_dump(exclude_none=True))
     return user
 
 
@@ -677,12 +677,17 @@ async def register(req: RegisterRequest, response: Response):
         has_password=True,
         avatar_url=f"https://api.dicebear.com/7.x/identicon/svg?seed={username}&backgroundColor=53FC18,0A0A0A",
     )
-    doc = user_obj.model_dump()
+    doc = user_obj.model_dump(exclude_none=True)
     doc["password_hash"] = hash_password(req.password)
     try:
         await db.users.insert_one(doc)
-    except DuplicateKeyError:
-        raise HTTPException(status_code=409, detail="Bu kullanıcı adı zaten alınmış")
+    except DuplicateKeyError as e:
+        key = (getattr(e, "details", {}) or {}).get("keyPattern", {})
+        if "username" in key:
+            raise HTTPException(status_code=409, detail="Bu kullanıcı adı zaten alınmış")
+        if "telegram_id" in key:
+            raise HTTPException(status_code=409, detail="Bu Telegram hesabı zaten başka bir kullanıcıya bağlı")
+        raise HTTPException(status_code=409, detail="Kayıt çakışması")
     token = create_access_token(user_obj.id)
     set_auth_cookie(response, token)
     return {"user": user_to_public(doc), "access_token": token, "missing_channels": REQUIRED_CHANNELS, "needs_password_setup": False}
@@ -949,8 +954,32 @@ async def startup():
     await db.clips.create_index("kick_clip_id", unique=True)
     await db.clips.create_index("week_key")
     await db.users.create_index("username", unique=True)
-    await db.users.create_index("telegram_id", unique=True, sparse=True)
-    await db.users.create_index("email", sparse=True)
+    # IMPORTANT: sparse=True does NOT skip docs where field exists with value null.
+    # Use partialFilterExpression so null/missing telegram_id never collide.
+    # Drop legacy sparse index first if it exists (create_index is a no-op on identical name+keys).
+    try:
+        existing_indexes = await db.users.index_information()
+        for name, info in existing_indexes.items():
+            if name == "_id_":
+                continue
+            keys = info.get("key", [])
+            if any(k[0] == "telegram_id" for k in keys) and "partialFilterExpression" not in info:
+                await db.users.drop_index(name)
+            if any(k[0] == "email" for k in keys) and "partialFilterExpression" not in info and name != "email_1_partial":
+                await db.users.drop_index(name)
+    except Exception as e:
+        logger.warning(f"Index migration warning: {e}")
+    await db.users.create_index(
+        "telegram_id",
+        unique=True,
+        partialFilterExpression={"telegram_id": {"$type": "string"}},
+        name="telegram_id_unique_partial",
+    )
+    await db.users.create_index(
+        "email",
+        partialFilterExpression={"email": {"$type": "string"}},
+        name="email_partial",
+    )
     await db.votes.create_index([("clip_id", 1), ("user_id", 1)], unique=True)
     await db.verify_codes.create_index("code", unique=True)
     await db.verify_codes.create_index("telegram_id")

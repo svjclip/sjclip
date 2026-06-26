@@ -328,9 +328,11 @@ class TestIndexes:
         # username unique
         uname_idx = next((v for k, v in info.items() if v.get("key") == [("username", 1)]), None)
         assert uname_idx and uname_idx.get("unique")
-        # telegram_id unique sparse
+        # telegram_id unique with partialFilterExpression (replaces legacy sparse index)
         tg_idx = next((v for k, v in info.items() if v.get("key") == [("telegram_id", 1)]), None)
-        assert tg_idx and tg_idx.get("unique") and tg_idx.get("sparse")
+        assert tg_idx and tg_idx.get("unique")
+        pfe = tg_idx.get("partialFilterExpression")
+        assert pfe == {"telegram_id": {"$type": "string"}}, f"Expected partialFilterExpression, got {tg_idx}"
 
     def test_password_reset_code_unique(self):
         info = db.password_reset_codes.index_information()
