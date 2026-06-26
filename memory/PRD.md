@@ -181,7 +181,12 @@ SVJ adlı Kick yayıncısı için topluluk klip oylama platformu. Kullanıcılar
 - Channels: `https://t.me/thesvjduyuru`, `https://t.me/thesvjbaris`
 
 ## Changelog
-### 2026-02-26 — Bug Fixes (Iter 11)
-- **BUG (Kick embed URL)**: `kickEmbedUrl()` in `frontend/src/lib/api.js` was returning `https://kick.com/clips/{id}/embed` (streamer-less ve geçersiz). Düzeltildi: artık resmi `https://player.kick.com/{clipId}` formatını döndürüyor. Klip videoları artık iframe içinde yüklenebiliyor.
-- **BUG (Telegram dialog tıkıyor)**: `GlobalTelegramGate` `allowSkip={false}` ile çağırılıyordu, X butonu ve 'Daha sonra' linki gizliydi. Düzeltildi: artık `allowSkip={true}`, sessionStorage destekli `dismissed` state ile kullanıcı dialog'u kapatabiliyor, navbar'daki yeni `nav-open-telegram-gate-btn` butonu ile (custom event `svj:open-telegram-gate`) istediğinde tekrar açabiliyor. Test ajanı `iteration_11.json` ile her iki düzeltmeyi de doğruladı.
+### 2026-02-26 — In-page HLS Playback + Share Menu (Iter 12-15)
+- **Embed mimarisi tamamen değişti**: Kick'in iframe `kick.com/.../embed` ve `player.kick.com/embed/clips/...?parent=...` URL'leri Cloudflare + `X-Frame-Options: SAMEORIGIN` ile her zaman 403 dönüyor (resmi bir clip embed API'si yok — docs.kick.com doğruladı). Yerine `clips.kick.com` (CloudFront CDN, CORS=*) üzerinden HLS playlist akışı uyguladık: `https://clips.kick.com/clips/<shard>/<clip_id>/playlist.m3u8`. CloudFront engellenmiyor.
+- **Shard discovery**: Yeni `discover_kick_shard()` helper, 256 paralel HEAD ile shard'ı bulup `Clip.kick_shard` alanına cache'liyor. Mevcut klipler için `POST /api/clips/{id}/resolve-shard` lazy backfill yapıyor (auth gerektirmez).
+- **Frontend `KickClipPlayer.jsx`**: hls.js@1.6.16 ile native `<video>` etiketinde oynatım. Safari için natif HLS fallback. Üç katmanlı shard resolution: DB cache → backend endpoint → client-side 256-shard probe.
+- **`ShareClipMenu.jsx`**: Klip kartlarına Telegram / WhatsApp / Linki kopyala paylaş menüsü eklendi. Popover Radix trigger'da `setOpen((o) => !o)` ile manuel toggle.
+- **Telegram dialog dismissible**: `GlobalTelegramGate` artık X butonu ve "Daha sonra" linki ile kapanabiliyor; sessionStorage ile aynı oturumda tekrar açılmıyor; navbar'da `nav-open-telegram-gate-btn` ile istediğinde tekrar açılır.
+- **Demo/fake clip'ler silindi**: Sadece gerçek user klibi (id=3dc8aa18..., kick_clip_id=clip_01KW0WTXJZ2YBQG5PNAQVZP2PR, shard=7a) MongoDB'de duruyor.
+
 
