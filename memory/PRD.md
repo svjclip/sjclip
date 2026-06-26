@@ -29,6 +29,14 @@ SVJ adlı Kick yayıncısı için topluluk klip oylama platformu. Kullanıcılar
 
 ## Implementation History
 
+### Phase 9 — Layout Compact + ClipDetail Vote Bar Unification (DONE — 2026-06-26)
+**User feedback:** "ClipDetailPage vote butonu hâlâ eski tarz" + "klipler çok aşağıda kalıyor çok fazla scroll gerekiyor"
+**Changes**
+- **HomePage layout reorganize**: hero `min-h-[100vh]` → `78vh`, hero başlık tek satır (3 satır → 1 satır), section padding `py-24` → `pt-12 pb-10`. Section sırası: `hero → Top3 → Feed → HowItWorks → PrizeReveal` (önceki: `hero → HowItWorks → PrizeReveal → Top3 → Feed`). Sonuç: 1080p ekranda klipler **fold üzerinde** görünür — first upvote-btn y=1309 (önceden 2140, ~830px yukarı).
+- **ClipDetailPage vote bar**: ClipCard ile aynı tasarım — `w-full h-16` "OY VER · N" / "OYLADIN · N". Iframe üstüne success overlay (1.1s büyük yeşil ✓ + "Oy verildi"). Spring icon swap + count slide-in + voted'da gradient + glow + inset boxShadow infinite pulse. Eski sağdaki küçük pill kaldırıldı.
+
+**Test (iteration_9.json):** Frontend 100% ✅, Backend 5/5 ✅, regression yok. Hero 842px, first clip y=1309, detail vote-btn 960×64px, anonim/self-vote'ta overlay tetiklenmiyor (gate korunmuş).
+
 ### Phase 8 — Vote Bar Redesign + Counter Formula Fix (DONE — 2026-06-26)
 **User feedback:** "oy verme butonu değişmemiş", "sayı çok şişmiş", "1 kişi kayıt olunca onu 4 kişi saysın, sıradakine 8. kişi sen ol desin"
 **Changes**
