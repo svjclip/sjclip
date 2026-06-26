@@ -1,16 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Crown, Trophy, Clock, AlertOctagon } from "lucide-react";
+import { Clock, AlertOctagon } from "lucide-react";
 import { api } from "../lib/api";
+import WinnerHero from "./WinnerHero";
 
 /**
  * Displays one of three states based on /api/contests/active:
  *   - "active"     : countdown style status badge ("Etkinlik aktif — N gün kaldı")
  *   - "ended"      : warning banner ("Etkinlik kapalı, yeni etkinlik açılınca oy verebilirsiniz")
  *   - "no_contest" : muted hint
- * If a winner is announced (status='active' with winner OR status='ended' with winner)
- * a celebratory hero card is rendered above the status row.
+ * If a winner is announced, an editorial WinnerHero card is rendered above.
  */
 export default function ContestStatus() {
   const [data, setData] = useState(null);
@@ -34,57 +33,6 @@ export default function ContestStatus() {
       {winner_clip && <WinnerHero clip={winner_clip} contestName={contest?.name} />}
       <StatusRow status={status} contest={contest} />
     </div>
-  );
-}
-
-function WinnerHero({ clip, contestName }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="relative border border-[#FFD166]/40 bg-gradient-to-br from-[#FFD166]/15 via-[#FFD166]/5 to-transparent p-5 overflow-hidden"
-      data-testid="winner-hero"
-    >
-      <div className="absolute -top-6 -right-6 opacity-20">
-        <Crown className="w-32 h-32 text-[#FFD166]" />
-      </div>
-      <div className="relative flex items-start gap-4 flex-wrap">
-        <div className="w-12 h-12 rounded-full bg-[#FFD166]/20 border border-[#FFD166]/50 flex items-center justify-center flex-shrink-0">
-          <Crown className="w-6 h-6 text-[#FFD166]" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-[#FFD166] mb-1">
-            {contestName ? `${contestName} • Kazanan` : "Bu Haftanın Kazananı"}
-          </div>
-          <Link
-            to={`/clip/${clip.id}`}
-            className="block font-display font-black text-2xl sm:text-3xl tracking-tighter hover:text-[#FFD166] transition-colors truncate"
-            data-testid="winner-clip-title"
-          >
-            {clip.title}
-          </Link>
-          <div className="text-sm text-zinc-400 mt-1">
-            <Link
-              to={`/profil/${clip.submitter_username}`}
-              className="hover:text-white font-medium"
-            >
-              @{clip.submitter_username}
-            </Link>
-            <span className="mx-2 text-zinc-600">•</span>
-            <span className="text-zinc-500">{clip.votes_count} oy</span>
-          </div>
-        </div>
-        <Link
-          to={`/clip/${clip.id}`}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#FFD166] text-black text-sm font-bold uppercase tracking-wider hover:bg-[#e6bb5c] transition-colors flex-shrink-0"
-          data-testid="winner-clip-cta"
-        >
-          <Trophy className="w-4 h-4" />
-          İzle
-        </Link>
-      </div>
-    </motion.div>
   );
 }
 
