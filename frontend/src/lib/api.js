@@ -32,8 +32,10 @@ export function parseKickClipId(url) {
 }
 
 export function kickEmbedUrl(clipId) {
-  // Kick'in resmi player embed endpoint'i. Streamer adına ihtiyaç duymaz.
-  return `https://player.kick.com/${clipId}`;
+  // Kick'in clip embed'i streamer adı dahil tam yolu ister:
+  // https://kick.com/<streamer>/clips/<clip_id>/embed
+  // Sistem zaten yalnızca @slotjack kliplerini kabul ediyor, bu yüzden hardcode güvenli.
+  return `https://kick.com/slotjack/clips/${clipId}/embed`;
 }
 
 export function formatApiError(detail, fallback = "Bir hata oluştu") {

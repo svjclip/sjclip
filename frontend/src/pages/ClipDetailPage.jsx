@@ -7,6 +7,7 @@ import { api, kickEmbedUrl, formatApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
 import ReportClipDialog from "../components/ReportClipDialog";
+import ShareClipMenu from "../components/ShareClipMenu";
 
 export default function ClipDetailPage() {
   const { id } = useParams();
@@ -121,6 +122,7 @@ export default function ClipDetailPage() {
             <a href={clip.kick_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-[#53FC18]" data-testid="clip-detail-kick-link">
               <ExternalLink className="w-4 h-4" /> Kick
             </a>
+            <ShareClipMenu clipId={clip.id} title={clip.title} />
             {user && user.username !== clip.submitter_username && (
               <button
                 type="button"

@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import ChannelGateDialog from "./ChannelGateDialog";
 import ReportClipDialog from "./ReportClipDialog";
 import ReactionBar from "./ReactionBar";
+import ShareClipMenu from "./ShareClipMenu";
 
 export default function ClipCard({ clip, rank, onDeleted }) {
   const { user } = useAuth();
@@ -252,6 +253,7 @@ export default function ClipCard({ clip, rank, onDeleted }) {
           >
             <ExternalLink className="w-4 h-4" />
           </a>
+          <ShareClipMenu clipId={clip.id} title={clip.title} />
         </div>
 
         <div className="flex items-center justify-between">
