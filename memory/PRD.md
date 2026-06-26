@@ -61,12 +61,18 @@ SVJ adlı Kick yayıncısı için topluluk klip oylama platformu. Kullanıcılar
 - model_dump(exclude_none=True) tüm User insert'lerinde — null index collision önlemi
 - DuplicateKeyError handler keyPattern'e bakıp doğru mesaj döner
 
-**Frontend**
-- LoginDialog 3 tab (Giriş / Kayıt / Telegram) + forgot password sub-flow (2 step)
-- SetPasswordDialog — needs_password_setup ise zorunlu modal (kapatılamaz)
-- SubmitClipDialog 403 yakalama → gate-telegram-modal veya ChannelGateDialog tetikleme
-- auth.jsx — withCredentials cookie tabanlı, passwordLogin/register/verifyTelegramCode/setPasswordForLegacy/forgotPassword/resetPassword/logout/recheckChannels API'leri
-- formatApiError helper — nested error object handling
+**Frontend (UX revize 2026-06-26)**
+- LoginDialog: **sadece 2 sekme** (Giriş Yap / Kayıt Ol). Telegram sekmesi KALDIRILDI.
+- LoginDialog forgot password sub-flow (2 step) — değişmedi
+- TelegramLinkDialog (YENİ) — kayıt/giriş sonrası ZORUNLU modal (allowSkip=false, X yok, Escape/overlay engelli). Stage: link → channels → done (1.2s sonra otomatik kapanır)
+- App.js GlobalTelegramGate — user var + (telegram_id yok || missing_channels) ise otomatik render, sayfa yenileme sonrası persistent
+- SetPasswordDialog — needs_password_setup ise zorunlu modal (Telegram-only legacy user için, Telegram gate'inden ÖNCE çalışır)
+- SubmitClipDialog 403 yakalama → refreshUser() → GlobalTelegramGate otomatik tetikler
+- auth.jsx — withCredentials cookie tabanlı API'ler
+
+**Test Sonuçları (iteration_5.json)**
+- Backend smoke: 6/6 PASS
+- Frontend UX: 12/12 PASS — Telegram tab yok, kayıt sonrası zorunlu modal, dismissible değil, sayfa yenileme persistent
 
 **Indexes (MongoDB)**
 - `users.username` unique
